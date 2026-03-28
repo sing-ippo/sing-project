@@ -1,0 +1,7 @@
+aiohttp-socks
+aiogram
+aiofile
+babel
+python-dotenv
+pytz
+pyyaml
