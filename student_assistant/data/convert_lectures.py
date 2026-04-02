@@ -1,11 +1,19 @@
 import json
+import re
 import nltk as nt
+from datetime import datetime
 from nltk.corpus import stopwords
+from pymorphy3 import MorphAnalyzer
 
 STOP_WORDS = set(stopwords.words('russian'))
+morph = MorphAnalyzer()
 STOP_WORDS.update(["такое"])
 MIN_LENGTH_WORD = 3
 START_ID = 1000
+WORD_PATTERN = re.compile(r'^[a-zа-яё]+(?:-[a-zа-яё]+)*$')
+
+def log(message):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
 
 def get_clean_keywords(text_list: list[str]) -> list[str]:
     if not text_list:
@@ -17,10 +25,12 @@ def get_clean_keywords(text_list: list[str]) -> list[str]:
         tokens = nt.word_tokenize(text, language="russian")
         for word in tokens:
             clean_word = word.lower()
-            if (len(clean_word) >= MIN_LENGTH_WORD and 
-               (clean_word not in STOP_WORDS) and 
-               (word.replace('-', '').replace('/','').isalpha())):
-                unique_words[clean_word] = None 
+            if len(clean_word) < MIN_LENGTH_WORD or clean_word in STOP_WORDS:
+                continue
+            if WORD_PATTERN.match(clean_word):
+                parsed = morph.parse(clean_word)[0]
+                lemma = parsed.normal_form
+                unique_words[lemma] = None 
                 
     return list(unique_words.keys())
 
@@ -39,7 +49,7 @@ def convert_lectures(lectures_path: str, faq_path: str) -> list[dict]:
             faqs = json.load(f)
         
     except FileNotFoundError as e:
-        print(f"Ошибка: Не найден файл {e.filename}")
+        log(f"Ошибка: Не найден файл {e.filename}")
         return
     
     for item in faqs:
@@ -47,10 +57,10 @@ def convert_lectures(lectures_path: str, faq_path: str) -> list[dict]:
         q_text = item.get("question")
         a_text = item.get("answer")
         
-        keywords = lectures_lookup.get(l_id)
+        lecture_keywords = lectures_lookup.get(l_id)
+        question_keywords = get_clean_keywords([q_text])
+        keywords = list(set(lecture_keywords + question_keywords))
 
-        if not keywords:
-            keywords = get_clean_keywords([q_text])
         combined_data.append({
             "id": current_id,
             "question": q_text,     
