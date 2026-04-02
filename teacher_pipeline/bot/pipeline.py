@@ -3,7 +3,7 @@ import json
 import os
 import sys
 from dotenv import load_dotenv
-load_dotenv(".env")
+load_dotenv()
 def load_txt(path):
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
