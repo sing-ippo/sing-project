@@ -4,7 +4,7 @@ import asyncio
 import socket
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
-from telegram.request import HTTPXRequest # Добавили для явной настройки прокси
+from telegram.request import HTTPXRequest
 from dotenv import load_dotenv
 
 PROXY_URL = 'http://127.0.0.1:10809'
@@ -45,15 +45,9 @@ async def handle_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not result or result.get("error") == "file_too_large_or_empty":
             await msg.edit_text("Ошибка: Файл слишком большой (лимит 50 КБ) или не содержит текста.")
             return
-
         if not result.get("quiz"):
             await msg.edit_text("Ошибка: Нейросеть не смогла составить вопросы по этому тексту.")
             return
-        
-        if not result or not result.get("quiz"):
-            raise Exception("Вопросы не созданы. Проверьте содержимое файла.")
-
-        # Сохраняем данные
         context.user_data['quiz'] = result['quiz']
         context.user_data['current_step'] = 0
         context.user_data['score'] = 0
@@ -94,7 +88,6 @@ async def send_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
     data = context.user_data
     if 'quiz' not in data or data['current_step'] >= len(data['quiz']):
         return
@@ -109,7 +102,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         status = f"❌ *Неверно.*\nПравильный ответ: {q['options'][correct_idx]}"
     
-    explanation = f"{status}\n\n💡 {q.get('explanation', '')}"
+    explanation = f"{status}\n\n💡Объяснение: {q.get('explanation', '')}"
     
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -146,7 +139,6 @@ def main():
         .request(t_request)
         .build()
     )
-    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_docs))
     app.add_handler(CallbackQueryHandler(handle_answer))
