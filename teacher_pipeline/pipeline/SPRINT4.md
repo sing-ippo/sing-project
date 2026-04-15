@@ -24,6 +24,8 @@
 **Логика (JavaScript):**
 
 ```javascript
+const BACKEND_URL = "http://localhost:8000"; // менять только здесь
+
 // 1. Нажать кнопку → начать запись
 navigator.mediaDevices.getUserMedia({ audio: true })
   .then(stream => {
@@ -39,7 +41,7 @@ const formData = new FormData();
 formData.append('audio', blob, 'question.webm');
 
 // 3. POST /ask → показать ответ + проиграть аудио
-const response = await fetch('http://localhost:8000/ask', {
+const response = await fetch(`${BACKEND_URL}/ask`, {
   method: 'POST',
   body: formData
 });
@@ -68,14 +70,6 @@ with socketserver.TCPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as
     httpd.serve_forever()
 ```
 
-### URL бэкенда
-
-В начале JS-кода вынести как константу — чтобы легко менять:
-```javascript
-const BACKEND_URL = "http://localhost:8000";
-// ...
-const response = await fetch(`${BACKEND_URL}/ask`, { ... });
-```
 
 ## Результат: что лежит в папке
 
