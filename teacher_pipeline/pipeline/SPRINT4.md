@@ -57,7 +57,24 @@ const data = await response.json();
 
 ```python
 import http.server
-# python kiosk_server.py → http://localhost:3000
+import socketserver
+import os
+
+PORT = 3000
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+with socketserver.TCPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as httpd:
+    print(f"Киоск запущен: http://localhost:{PORT}/kiosk.html")
+    httpd.serve_forever()
+```
+
+### URL бэкенда
+
+В начале JS-кода вынести как константу — чтобы легко менять:
+```javascript
+const BACKEND_URL = "http://localhost:8000";
+// ...
+const response = await fetch(`${BACKEND_URL}/ask`, { ... });
 ```
 
 ## Результат: что лежит в папке

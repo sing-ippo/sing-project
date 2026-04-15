@@ -49,11 +49,11 @@ PROXY_URL=http://127.0.0.1:10809
    - Возвращает quiz в том же формате что и `generate_quiz()`
 
 2. Добавить в `teacher_bot.py` хэндлер команды `/quiz_faq`:
-   - Читает `faq.json` — файл лежит в `student_assistant/data/faq.json`. Путь указать в `.env`:
+   - Читает `faq.json` — файл лежит в `student_assistant/data/faq.json`. Использовать `pathlib` чтобы путь не зависел от того, из какой директории запускается бот:
+     ```python
+     from pathlib import Path
+     FAQ_PATH = Path(__file__).parent.parent.parent / "student_assistant" / "data" / "faq.json"
      ```
-     FAQ_PATH=../../student_assistant/data/faq.json
-     ```
-     И читать через `os.getenv("FAQ_PATH", "../../student_assistant/data/faq.json")`
    - Фильтрует по категории если указана
    - Запускает `generate_quiz_from_faq()`
    - Запускает интерактивный квиз (уже есть в боте)

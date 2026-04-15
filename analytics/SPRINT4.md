@@ -45,6 +45,9 @@
 4. **Легенда** — цвета категорий
 
 **Технически:**
+
+Использовать **D3.js v7** (CDN: `https://cdn.jsdelivr.net/npm/d3@7`):
+
 ```javascript
 // Загрузка и трансформация данных
 const nodes = [];
@@ -53,15 +56,15 @@ const links = [];
 faqData.forEach(entry => {
   // добавить узел категории (если нет)
   // добавить узел вопроса
-  // добавить узлы ключевых слов
-  // добавить рёбра
+  // добавить ребро категория → вопрос
+  // ключевые слова НЕ добавлять как узлы — показывать в карточке при клике
 });
 
 // D3 force simulation
 const simulation = d3.forceSimulation(nodes)
-  .force("link", d3.forceLink(links))
-  .force("charge", d3.forceManyBody())
-  .force("center", d3.forceCenter(width/2, height/2));
+  .force("link", d3.forceLink(links).id(d => d.id))
+  .force("charge", d3.forceManyBody().strength(-100))
+  .force("center", d3.forceCenter(width / 2, height / 2));
 ```
 
 ## Результат: что лежит в папке

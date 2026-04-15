@@ -17,7 +17,7 @@ FastAPI сервер с одним главным endpoint:
 {
   "question": "когда день открытых дверей?",
   "answer": "День открытых дверей проходит...",
-  "audio_base64": "base64-encoded mp3"
+  "audio_base64": "base64-encoded wav"
 }
 ```
 
@@ -48,23 +48,29 @@ FastAPI сервер с одним главным endpoint:
    question = result["text"]
    ```
 
-3. **search_engine** — текст → ответ из faq.json (ваш модуль из Sprint 3)
+3. **search_engine** — текст → ответ из faq.json (ваш модуль из Sprint 3). Функция `search()` там `async def` — вызывать через `await search(...)`
 
-4. **Silero TTS** — ответ → аудио. `apply_tts()` возвращает torch.Tensor — его нужно конвертировать в байты:
+4. **Silero TTS** — ответ → аудио. `apply_tts()` возвращает torch.Tensor — его нужно конвертировать в WAV-байты:
    ```python
-   import torch, io, scipy.io.wavfile as wav
-   import numpy as np
+   import torch, io, numpy as np
+   import scipy.io.wavfile as wavfile
 
+   # Загружать один раз при старте, не внутри endpoint:
    tts_model, _ = torch.hub.load('snakers4/silero-models',
                                    'silero_tts', language='ru', speaker='v3_1_ru')
+
+   # Внутри endpoint:
    audio_tensor = tts_model.apply_tts(text=answer, speaker='aidar', sample_rate=48000)
+   audio_int16 = (audio_tensor.numpy() * 32767).astype(np.int16)
 
    buf = io.BytesIO()
-   wav.write(buf, 48000, audio_tensor.numpy())
+   wavfile.write(buf, 48000, audio_int16)
    audio_bytes = buf.getvalue()
    ```
 
 5. Вернуть `audio_base64` через `base64.b64encode(audio_bytes).decode()`
+
+> **Важно:** и Whisper, и Silero модели нужно загружать **один раз при старте сервера** (глобальные переменные), а не внутри endpoint — иначе каждый запрос будет грузить модель заново (~30 сек).
 
 ### CORS — обязательно
 
@@ -82,7 +88,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
 ### Лев
 
-- Пишет `requirements.txt` для голосового сервера (whisper, torch, silero, scipy, ffmpeg-python, fastapi, uvicorn)
+- Пишет `requirements.txt` для голосового сервера: `openai-whisper`, `torch`, `scipy`, `numpy`, `fastapi`, `uvicorn`, `python-multipart`. Silero грузится через `torch.hub` — в requirements не добавлять. ffmpeg — системная утилита, устанавливается отдельно (`brew install ffmpeg`).
 - Пишет `README.md`: как установить ffmpeg и зависимости, как запустить сервер
 - Пишет `test_voice.py` — автотест: отправить тестовый WAV-файл на `/ask`, проверить что в ответе есть поля `question`, `answer`, `audio_base64`
 - Тестирует end-to-end: записать wav → отправить → получить ответ
