@@ -1,34 +1,38 @@
+import json
 import re
-
+from pathlib import Path
+from typing import Any
 
 # =========================
 # НАСТРОЙКИ
 # =========================
 
-# Минимальная длина слова, которое мы вообще учитываем при поиске (пропуск предлогов)
 MIN_WORD_LEN = 3
-
-# Порог уверенности по умолчанию
 DEFAULT_CONFIDENCE_THRESHOLD = 4
+DEFAULT_FALLBACK_ANSWER = (
+    "Извините, я не смог найти точный ответ в базе знаний. "
+    "Попробуйте переформулировать вопрос."
+)
 
 
 # =========================
 # РАБОТА С FAQ
 # =========================
 
-# Разделение ввода на отдельные слова и приведение к нижнему регистру, отбрасывает слова с длиной меньше MIN_WORD_LEN
 def split_words(text: str) -> set[str]:
+    """Разбивает текст на слова, приводит к нижнему регистру, убирает короткие слова."""
     words = re.findall(r"[а-яА-Яa-zA-Z0-9ёЁ]+", text.lower())
     return {word for word in words if len(word) >= MIN_WORD_LEN}
 
 
-# Сравнивает слова введенные пользователем и ключевые слова из FAQ
-# Вес совпадения:
-# 4 - точное совпадение
-# 3 - частичное совпадение
-# 2 - часть слова (начало) совпадает с ключевым
-# 0 - нет совпадения
 def compare_word_and_keyword(word: str, keyword_part: str) -> int:
+    """
+    Вес совпадения:
+    4 - точное совпадение
+    3 - одно слово входит в другое
+    2 - совпадают первые 3 символа
+    0 - совпадения нет
+    """
     if word == keyword_part:
         return 4
 
@@ -36,7 +40,6 @@ def compare_word_and_keyword(word: str, keyword_part: str) -> int:
         return 3
 
     min_prefix_len = 3
-
     if len(word) >= min_prefix_len and len(keyword_part) >= min_prefix_len:
         if word[:min_prefix_len] == keyword_part[:min_prefix_len]:
             return 2
@@ -44,8 +47,8 @@ def compare_word_and_keyword(word: str, keyword_part: str) -> int:
     return 0
 
 
-# Подсчет количества очков для поиска лучшего совпадения
 def calculate_score(question_words: set[str], keywords: list[str]) -> int:
+    """Считает общий score для одной FAQ-записи."""
     total_score = 0
     used_keyword_parts = set()
 
@@ -67,10 +70,10 @@ def calculate_score(question_words: set[str], keywords: list[str]) -> int:
     return total_score
 
 
-# Поиск лучших совпадений по базе FAQ
 def search_top_faq(question: str, faq_entries: list[dict], top_n: int = 5) -> list[tuple[int, dict]]:
+    """Возвращает top_n FAQ-записей по score."""
     question_words = split_words(question)
-    results = []
+    results: list[tuple[int, dict]] = []
 
     for entry in faq_entries:
         score = calculate_score(question_words, entry.get("keywords", []))
@@ -80,8 +83,17 @@ def search_top_faq(question: str, faq_entries: list[dict], top_n: int = 5) -> li
     return results[:top_n]
 
 
-# Отсечение неподходящих элементов (количество набранных очков < 2 || разница в очках с лучшим вариантом > 1, вывод первых 5 лучших вариантов)
-def search_matching_faq(question: str, faq_entries: list[dict], min_score: int = 2, top_n: int = 5):
+def search_matching_faq(
+    question: str,
+    faq_entries: list[dict],
+    min_score: int = 2,
+    top_n: int = 5,
+) -> list[tuple[int, dict]]:
+    """
+    Отсекает слабые совпадения:
+    - score < min_score
+    - слишком далеко от лучшего результата
+    """
     results = search_top_faq(question, faq_entries, top_n=top_n)
     results = [(score, entry) for score, entry in results if score >= min_score]
 
@@ -93,46 +105,56 @@ def search_matching_faq(question: str, faq_entries: list[dict], min_score: int =
 
 
 def format_results(results: list[tuple[int, dict]]) -> list[dict]:
-    formatted = []
+    """Приводит результаты к удобному JSON-friendly виду."""
+    formatted: list[dict] = []
 
     for score, entry in results:
-        formatted.append({
-            "id": entry.get("id"),
-            "question": entry.get("question"),
-            "answer": entry.get("answer"),
-            "score": score,
-        })
+        formatted.append(
+            {
+                "id": entry.get("id"),
+                "question": entry.get("question"),
+                "answer": entry.get("answer"),
+                "score": score,
+            }
+        )
 
     return formatted
 
 
-def search(query: str, faq_data: list[dict], top_n: int = 3) -> list[dict]:
+# =========================
+# ОСНОВНОЙ ПОИСК
+# =========================
+
+def _search_sync(query: str, faq_data: list[dict], top_n: int = 3) -> list[dict]:
     """
-    Принимает запрос и список FAQ-записей.
-    Возвращает топ-N результатов с полями: id, question, answer, score.
+    Синхронная внутренняя версия поиска.
+    Возвращает top-N результатов с полями: id, question, answer, score.
     """
     results = search_matching_faq(query, faq_data, min_score=2, top_n=top_n)
     return format_results(results)
 
 
-def search_with_confidence(
+async def search(query: str, faq_data: list[dict], top_n: int = 3) -> list[dict]:
+    """
+    Асинхронная версия под Sprint 4.
+    Её можно вызывать через await из FastAPI.
+    """
+    return _search_sync(query, faq_data, top_n=top_n)
+
+
+async def search_with_confidence(
     query: str,
     faq_data: list[dict],
     top_n: int = 3,
-    confidence_threshold: int = DEFAULT_CONFIDENCE_THRESHOLD
+    confidence_threshold: int = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> dict:
     """
-    Принимает запрос и список FAQ-записей.
     Возвращает:
     {
         "results": [...],
         "confident": bool
     }
-
-    confident = True, если лучший score >= confidence_threshold
-    confident = False, если все результаты < confidence_threshold
     """
-
     top_results = search_top_faq(query, faq_data, top_n=top_n)
     best_score = top_results[0][0] if top_results else 0
 
@@ -141,5 +163,66 @@ def search_with_confidence(
 
     return {
         "results": formatted_results,
-        "confident": best_score >= confidence_threshold
+        "confident": best_score >= confidence_threshold,
+    }
+
+
+# =========================
+# УТИЛИТЫ ДЛЯ СЕРВЕРА
+# =========================
+
+def load_faq_from_file(path: str | Path | None = None) -> list[dict]:
+    """
+    Загружает faq.json.
+    Если путь не передан, берёт faq.json рядом с этим файлом.
+    """
+    faq_path = Path(path) if path is not None else Path(__file__).with_name("faq.json")
+
+    with faq_path.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    if not isinstance(data, list):
+        raise ValueError("faq.json должен содержать список объектов")
+
+    return data
+
+
+async def get_best_answer(
+    query: str,
+    faq_data: list[dict],
+    top_n: int = 3,
+    fallback_answer: str = DEFAULT_FALLBACK_ANSWER,
+) -> dict[str, Any]:
+    """
+    Главная функция для voice_server.py.
+
+    Возвращает словарь вида:
+    {
+        "question": "...",
+        "answer": "...",
+        "found": bool,
+        "match": {...} | None,
+        "results": [...]
+    }
+    """
+    normalized_query = query.strip()
+    results = await search(normalized_query, faq_data, top_n=top_n)
+
+    if not results:
+        return {
+            "question": normalized_query,
+            "answer": fallback_answer,
+            "found": False,
+            "match": None,
+            "results": [],
+        }
+
+    best_match = results[0]
+
+    return {
+        "question": normalized_query,
+        "answer": best_match.get("answer", fallback_answer),
+        "found": True,
+        "match": best_match,
+        "results": results,
     }
