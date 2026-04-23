@@ -849,6 +849,38 @@
         return 'другое';
     }
 
+    function wordSet(text) {
+        return new Set(text.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+    }
+
+    function jaccard(a, b) {
+        const inter = [...a].filter(x => b.has(x)).length;
+        const union = a.size + b.size - inter;
+        return union === 0 ? 0 : inter / union;
+    }
+
+    function clusterBySimilarity(items, threshold = 0.3) {
+        const sets = items.map(s => wordSet(s.question));
+        const assigned = new Array(items.length).fill(-1);
+        const clusters = [];
+
+        for (let i = 0; i < items.length; i++) {
+            if (assigned[i] !== -1) continue;
+            const cluster = [i];
+            assigned[i] = clusters.length;
+            for (let j = i + 1; j < items.length; j++) {
+                if (assigned[j] === -1 && jaccard(sets[i], sets[j]) >= threshold) {
+                    cluster.push(j);
+                    assigned[j] = clusters.length;
+                }
+            }
+            clusters.push(cluster.map(idx => items[idx]));
+        }
+        // Сортируем кластеры по размеру (большие — первые)
+        clusters.sort((a, b) => b.length - a.length);
+        return clusters;
+    }
+
     function updateGaps() {
         if (suggestionsData.length === 0) {
             document.getElementById('gaps-content').innerHTML = `
@@ -857,24 +889,32 @@
             return;
         }
 
-        // Группируем предложения по типу
         const newQuestions = suggestionsData.filter(s => s.type === 'new_question');
         const withAnswers = suggestionsData.filter(s => s.type !== 'new_question');
 
         let html = '';
 
         if (newQuestions.length > 0) {
-            html += `
-                    <div class="gap-group">
-                        <h3>🆕 Новые вопросы (${newQuestions.length})</h3>
-                        ${newQuestions.map(s => `
-                            <div class="gap-item">
+            const clusters = clusterBySimilarity(newQuestions);
+            html += `<div class="gap-group"><h3>🆕 Новые вопросы (${newQuestions.length})</h3>`;
+            clusters.forEach((cluster, idx) => {
+                const label = cluster.length > 1
+                    ? `Похожие вопросы (${cluster.length})`
+                    : 'Уникальный вопрос';
+                html += `
+                    <details ${cluster.length > 1 ? 'open' : ''} style="margin-bottom:8px;">
+                        <summary style="cursor:pointer;font-weight:500;padding:4px 0;">
+                            ${escapeHtml(label)}: ${escapeHtml(cluster[0].question)}
+                        </summary>
+                        ${cluster.map(s => `
+                            <div class="gap-item" style="margin-left:16px;">
                                 <span class="gap-question">${escapeHtml(s.question)}</span>
-                                <span class="gap-meta">${s.user} • ${formatDate(s.timestamp)}</span>
+                                <span class="gap-meta">${escapeHtml(s.user)} • ${formatDate(s.timestamp)}</span>
                             </div>
                         `).join('')}
-                    </div>
-                `;
+                    </details>`;
+            });
+            html += '</div>';
         }
 
         if (withAnswers.length > 0) {
@@ -887,7 +927,7 @@
                                     <span class="gap-question">${escapeHtml(s.question)}</span>
                                     <div class="gap-meta" style="color: #4caf50; margin-top: 4px;">${escapeHtml(s.answer || '')}</div>
                                 </div>
-                                <span class="gap-meta">${s.user} • ${formatDate(s.timestamp)}</span>
+                                <span class="gap-meta">${escapeHtml(s.user)} • ${formatDate(s.timestamp)}</span>
                             </div>
                         `).join('')}
                     </div>
