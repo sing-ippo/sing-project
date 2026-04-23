@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Граф знаний — FAQ бот МИРЭА</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Toolbar ── */
+  #toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #1e293b;
+    border-bottom: 1px solid #334155;
+    flex-wrap: wrap;
+  }
+
+  #toolbar h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #f8fafc;
+    white-space: nowrap;
+    margin-right: 4px;
+  }
+
+  #search-input {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #475569;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-size: 13px;
+    width: 180px;
+    outline: none;
+  }
+  #search-input:focus { border-color: #60a5fa; }
+  #search-input::placeholder { color: #64748b; }
+
+  #load-btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid #475569;
+    background: #1e40af;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #load-btn:hover { background: #1d4ed8; }
+
+  #file-input { display: none; }
+
+  #stats {
+    font-size: 12px;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+
+  /* ── Category filter buttons ── */
+  #filters {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-left: auto;
+  }
+
+  .filter-btn {
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    font-size: 12px;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    font-weight: 500;
+  }
+  .filter-btn.active { opacity: 1; }
+  .filter-btn.inactive { opacity: 0.35; }
+  .filter-btn:hover { transform: scale(1.05); }
+
+  /* ── SVG container ── */
+  #graph-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .link {
+    stroke: #334155;
+    stroke-width: 1.2;
+    fill: none;
+  }
+
+  .node circle {
+    cursor: pointer;
+    stroke-width: 2;
+    transition: stroke 0.15s;
+  }
+
+  .node.category circle {
+    stroke: rgba(255,255,255,0.25);
+  }
+
+  .node.question circle {
+    stroke: transparent;
+  }
+
+  .node text {
+    pointer-events: none;
+    fill: #cbd5e1;
+    font-size: 11px;
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+
+  .node.category text {
+    font-size: 12px;
+    font-weight: 700;
+    fill: #f1f5f9;
+  }
+
+  .node.dim circle { opacity: 0.15; }
+  .node.dim text { opacity: 0.15; }
+  .link.dim { opacity: 0.06; }
+
+  .node.highlighted circle {
+    stroke: #f97316 !important;
+    stroke-width: 3;
+  }
+
+  /* ── Info card ── */
+  #info-card {
+    display: none;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 300px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    z-index: 10;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+  }
+
+  #info-card h3 {
+    font-size: 14px;
+    color: #f1f5f9;
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+
+  #info-card p {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+
+  .kw-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .kw-tag {
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #0f172a;
+    border: 1px solid #475569;
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  .card-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    margin-bottom: 4px;
+  }
+
+  .card-section { margin-bottom: 12px; }
+
+  #close-card {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: #64748b;
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  #close-card:hover { color: #f1f5f9; }
+
+  /* ── Legend ── */
+  #legend {
+    display: none;
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    background: rgba(30,41,59,0.92);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 10px 14px;
+    z-index: 10;
+  }
+
+  .legend-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #cbd5e1;
+    margin-bottom: 4px;
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Empty state ── */
+  #empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: #475569;
+    font-size: 15px;
+    pointer-events: none;
+  }
+
+  #empty-state .icon { font-size: 48px; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>Граф знаний FAQ</h1>
+
+  <button id="load-btn" onclick="document.getElementById('file-input').click()">
+    Загрузить faq.json
+  </button>
+  <input type="file" id="file-input" accept=".json">
+
+  <input type="text" id="search-input" placeholder="Поиск по вопросу…">
+
+  <span id="stats"></span>
+
+  <div id="filters"></div>
+</div>
+
+<div id="graph-container">
+  <div id="empty-state">
+    <span class="icon">🔗</span>
+    <span>Загрузите faq.json для визуализации графа знаний</span>
+  </div>
+
+  <svg id="graph-svg"></svg>
+
+  <div id="info-card">
+    <button id="close-card" onclick="closeCard()">×</button>
+    <div id="card-content"></div>
+  </div>
+
+  <div id="legend"></div>
+</div>
+
+<script>
+// ── Color palette ──────────────────────────────────────────────────────────
+const CATEGORY_COLORS = {
+  'экзамены':        '#e63946',
+  'преподаватели':   '#457b9d',
+  'навигация':       '#2a9d8f',
+  'учебный_процесс': '#e9c46a',
+  'ит_системы':      '#6a4c93',
+  'бюрократия':      '#f4a261',
+  'общежитие':       '#264653',
+  'лекции':          '#a8dadc',
+};
+
+const DEFAULT_COLOR = '#94a3b8';
+
+function categoryColor(cat) {
+  return CATEGORY_COLORS[cat] || DEFAULT_COLOR;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let simulation = null;
+let allNodes = [];
+let allLinks = [];
+let activeCategories = new Set();
+let svgRoot = null;
+
+// ── File loading ───────────────────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      buildGraph(data);
+    } catch (err) {
+      alert('Ошибка парсинга JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+  e.target.value = '';
+});
+
+// ── Build graph data ───────────────────────────────────────────────────────
+function buildGraph(faqData) {
+  if (!Array.isArray(faqData) || faqData.length === 0) {
+    alert('Некорректный формат: ожидается массив FAQ-записей');
+    return;
+  }
+
+  document.getElementById('empty-state').style.display = 'none';
+
+  const nodes = [];
+  const links = [];
+  const categorySet = new Map(); // category → node index
+
+  faqData.forEach((entry) => {
+    const cat = entry.category || 'другое';
+
+    if (!categorySet.has(cat)) {
+      categorySet.set(cat, nodes.length);
+      nodes.push({
+        id: `cat_${cat}`,
+        type: 'category',
+        label: cat,
+        color: categoryColor(cat),
+        category: cat,
+      });
+    }
+
+    const qId = `q_${entry.id}`;
+    nodes.push({
+      id: qId,
+      type: 'question',
+      label: entry.question,
+      color: '#475569',
+      category: cat,
+      data: entry,
+    });
+
+    links.push({ source: `cat_${cat}`, target: qId });
+  });
+
+  allNodes = nodes;
+  allLinks = links;
+
+  const categories = [...categorySet.keys()];
+  activeCategories = new Set(categories);
+
+  renderFilters(categories);
+  renderLegend(categories);
+  renderStats(faqData.length, categories.length);
+  drawGraph();
+}
+
+// ── Render D3 graph ────────────────────────────────────────────────────────
+function drawGraph() {
+  const container = document.getElementById('graph-container');
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+
+  const svg = d3.select('#graph-svg');
+  svg.selectAll('*').remove();
+
+  const g = svg.append('g');
+
+  // Zoom & pan
+  svg.call(
+    d3.zoom()
+      .scaleExtent([0.3, 4])
+      .on('zoom', (event) => g.attr('transform', event.transform))
+  );
+
+  const visibleNodes = allNodes.filter(n => activeCategories.has(n.category));
+  const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+  const visibleLinks = allLinks.filter(
+    l => visibleNodeIds.has(typeof l.source === 'object' ? l.source.id : l.source)
+      && visibleNodeIds.has(typeof l.target === 'object' ? l.target.id : l.target)
+  );
+
+  if (simulation) simulation.stop();
+
+  simulation = d3.forceSimulation(visibleNodes)
+    .force('link', d3.forceLink(visibleLinks).id(d => d.id).distance(80))
+    .force('charge', d3.forceManyBody().strength(-250))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collide', d3.forceCollide(d => d.type === 'category' ? 32 : 20));
+
+  const link = g.append('g')
+    .selectAll('line')
+    .data(visibleLinks)
+    .join('line')
+    .attr('class', 'link');
+
+  const node = g.append('g')
+    .selectAll('g')
+    .data(visibleNodes)
+    .join('g')
+    .attr('class', d => `node ${d.type}`)
+    .call(
+      d3.drag()
+        .on('start', (event, d) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x; d.fy = d.y;
+        })
+        .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+        .on('end', (event, d) => {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null; d.fy = null;
+        })
+    );
+
+  node.append('circle')
+    .attr('r', d => d.type === 'category' ? 24 : 12)
+    .attr('fill', d => d.color);
+
+  // Category label inside circle
+  node.filter(d => d.type === 'category')
+    .append('text')
+    .text(d => d.label.length > 10 ? d.label.slice(0, 9) + '…' : d.label)
+    .attr('y', 0);
+
+  // Hover behaviour
+  node
+    .on('mouseover', (event, d) => {
+      const relatedIds = new Set([d.id]);
+      if (d.type === 'category') {
+        visibleLinks.forEach(l => {
+          const src = typeof l.source === 'object' ? l.source.id : l.source;
+          const tgt = typeof l.target === 'object' ? l.target.id : l.target;
+          if (src === d.id) relatedIds.add(tgt);
+        });
+      } else {
+        visibleLinks.forEach(l => {
+          const src = typeof l.source === 'object' ? l.source.id : l.source;
+          const tgt = typeof l.target === 'object' ? l.target.id : l.target;
+          if (tgt === d.id) {
+            relatedIds.add(src);
+            // Siblings: same category node
+            visibleLinks.forEach(l2 => {
+              const s2 = typeof l2.source === 'object' ? l2.source.id : l2.source;
+              const t2 = typeof l2.target === 'object' ? l2.target.id : l2.target;
+              if (s2 === src) relatedIds.add(t2);
+            });
+          }
+        });
+      }
+
+      node.classed('dim', n => !relatedIds.has(n.id));
+      link.classed('dim', l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        return !relatedIds.has(s) || !relatedIds.has(t);
+      });
+    })
+    .on('mouseout', () => {
+      node.classed('dim', false);
+      link.classed('dim', false);
+    });
+
+  // Click: show info card for question nodes
+  node.filter(d => d.type === 'question')
+    .on('click', (event, d) => {
+      event.stopPropagation();
+      showCard(d.data);
+    });
+
+  // Click on SVG background closes card
+  svg.on('click', closeCard);
+
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  svgRoot = { node, link };
+}
+
+// ── Info card ──────────────────────────────────────────────────────────────
+function showCard(entry) {
+  const kws = Array.isArray(entry.keywords)
+    ? entry.keywords.map(k => `<span class="kw-tag">${escapeHtml(k)}</span>`).join('')
+    : '';
+
+  document.getElementById('card-content').innerHTML = `
+    <div class="card-section">
+      <div class="card-label">Вопрос</div>
+      <h3>${escapeHtml(entry.question)}</h3>
+    </div>
+    <div class="card-section">
+      <div class="card-label">Ответ</div>
+      <p>${escapeHtml(entry.answer)}</p>
+    </div>
+    ${kws ? `<div class="card-section">
+      <div class="card-label">Ключевые слова</div>
+      <div class="kw-list">${kws}</div>
+    </div>` : ''}
+    <div class="card-section">
+      <div class="card-label">Категория</div>
+      <span class="kw-tag" style="background:${categoryColor(entry.category)};color:#fff;border-color:transparent">
+        ${escapeHtml(entry.category || '—')}
+      </span>
+    </div>
+  `;
+  document.getElementById('info-card').style.display = 'block';
+}
+
+function closeCard() {
+  document.getElementById('info-card').style.display = 'none';
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+document.getElementById('search-input').addEventListener('input', (e) => {
+  const query = e.target.value.trim().toLowerCase();
+  if (!svgRoot) return;
+
+  svgRoot.node
+    .classed('highlighted', d => {
+      if (d.type !== 'question' || !query) return false;
+      return d.label.toLowerCase().includes(query)
+        || (d.data.keywords || []).some(k => k.includes(query));
+    });
+});
+
+// ── Category filter ────────────────────────────────────────────────────────
+function renderFilters(categories) {
+  const container = document.getElementById('filters');
+  container.innerHTML = '';
+
+  categories.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn active';
+    btn.textContent = cat;
+    btn.style.background = categoryColor(cat);
+    btn.style.color = '#fff';
+    btn.dataset.category = cat;
+    btn.addEventListener('click', () => toggleCategory(cat));
+    container.appendChild(btn);
+  });
+}
+
+function toggleCategory(cat) {
+  if (activeCategories.has(cat)) {
+    if (activeCategories.size === 1) return; // keep at least one
+    activeCategories.delete(cat);
+  } else {
+    activeCategories.add(cat);
+  }
+
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    const active = activeCategories.has(btn.dataset.category);
+    btn.classList.toggle('active', active);
+    btn.classList.toggle('inactive', !active);
+  });
+
+  closeCard();
+  drawGraph();
+}
+
+// ── Legend ─────────────────────────────────────────────────────────────────
+function renderLegend(categories) {
+  const el = document.getElementById('legend');
+  el.innerHTML = `<div class="legend-title">Категории</div>` +
+    categories.map(cat => `
+      <div class="legend-item">
+        <span class="legend-dot" style="background:${categoryColor(cat)}"></span>
+        <span>${cat}</span>
+      </div>`
+    ).join('');
+  el.style.display = 'block';
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+function renderStats(qCount, catCount) {
+  document.getElementById('stats').textContent =
+    `${qCount} вопросов • ${catCount} категорий`;
+}
+
+// ── Utility ────────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Redraw on resize
+window.addEventListener('resize', () => { if (allNodes.length) drawGraph(); });
+</script>
+</body>
+</html>
