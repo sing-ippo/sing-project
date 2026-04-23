@@ -1,7 +1,19 @@
+# Библиотеки для бота
 aiohttp-socks
 aiogram
 aiofile
 babel
 python-dotenv
 pytz
-pyyaml
+# Библиотеки для бэкэнда
+fastapi
+openai-whisper
+torch
+scipy
+numpy
+fastapi
+uvicorn
+python-multipart
+pytest
+httpx
+omegaconf
