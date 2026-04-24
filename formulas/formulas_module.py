@@ -200,6 +200,9 @@ def extract_formulas(
                 if not _LATEXISH_RE.search(text):
                     continue
 
+                if not isinstance(score, (int, float)) or score < 0.8:
+                    continue
+
                 bbox_pdf = image_bbox_to_pdf_bbox(bbox_img, zoom=zoom)
                 context = extract_context_from_pdf_words(
                     page,
