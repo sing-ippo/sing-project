@@ -4,269 +4,437 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Дашборд аналитики запросов — РТУ МИРЭА</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --bg: #f0f4ff;
+            --surface: #ffffff;
+            --surface-2: #f8faff;
+            --border: #e4e9f5;
+            --accent: #6366f1;
+            --accent-2: #8b5cf6;
+            --accent-light: #ede9fe;
+            --accent-grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --success: #10b981;
+            --success-light: #d1fae5;
+            --warning: #f59e0b;
+            --warning-light: #fef3c7;
+            --danger: #ef4444;
+            --danger-light: #fee2e2;
+            --info: #3b82f6;
+            --info-light: #dbeafe;
+            --text-1: #1e1b4b;
+            --text-2: #4b5563;
+            --text-3: #9ca3af;
+            --shadow-sm: 0 1px 3px rgba(99,102,241,0.08), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 16px rgba(99,102,241,0.10), 0 2px 6px rgba(0,0,0,0.06);
+            --shadow-lg: 0 8px 32px rgba(99,102,241,0.14), 0 4px 12px rgba(0,0,0,0.07);
+            --shadow-xl: 0 20px 60px rgba(99,102,241,0.16), 0 8px 20px rgba(0,0,0,0.08);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text-1);
             min-height: 100vh;
-            padding: 20px;
+            padding: 28px 20px 60px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
         }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
+        .container { max-width: 1440px; margin: 0 auto; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(18px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.96); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+
+        /* ── HEADER ── */
         header {
             text-align: center;
-            color: white;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
+            animation: fadeUp 0.5s ease both;
+        }
+
+        .header-inner {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--accent-light);
+            color: var(--accent);
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: 50px;
         }
 
         header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            font-size: clamp(1.9rem, 4vw, 2.8rem);
+            font-weight: 800;
+            color: var(--text-1);
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+        }
+
+        header h1 span {
+            background: var(--accent-grad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
+            color: var(--text-2);
+            font-size: 1rem;
+            font-weight: 400;
         }
 
-        .upload-section {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        /* ── CARDS (shared) ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            box-shadow: var(--shadow-md);
         }
 
-        .upload-section h2 {
-            color: #333;
+        .section-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.4px;
+            color: var(--text-3);
             margin-bottom: 20px;
-            font-size: 1.3rem;
+        }
+
+        /* ── UPLOAD ── */
+        .upload-section {
+            margin-bottom: 20px;
+            animation: fadeUp 0.5s 0.05s ease both;
         }
 
         .upload-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
         }
 
         .upload-card {
-            border: 2px dashed #667eea;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            transition: all 0.3s ease;
+            border: 1.5px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 28px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: var(--surface-2);
+            transition: all var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--accent-grad);
+            opacity: 0;
+            transition: opacity var(--transition);
         }
 
         .upload-card:hover {
-            border-color: #764ba2;
-            background: #f8f9ff;
+            border-color: var(--accent);
+            border-style: solid;
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
         }
 
-        .upload-card label {
+        .upload-card:hover::before { opacity: 0.04; }
+
+        .upload-card .upload-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
             display: block;
-            color: #667eea;
-            font-weight: 600;
-            margin-bottom: 10px;
         }
 
-        .upload-card input[type="file"] {
-            display: none;
+        .upload-card .upload-title {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 4px;
         }
+
+        .upload-card .upload-hint {
+            font-size: 0.78rem;
+            color: var(--text-3);
+            margin-bottom: 16px;
+        }
+
+        .upload-card input[type="file"] { display: none; }
 
         .upload-card .file-btn {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--accent-grad);
             color: white;
-            padding: 12px 25px;
-            border-radius: 8px;
+            padding: 10px 22px;
+            border-radius: 50px;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: transform var(--transition), box-shadow var(--transition);
+            position: relative;
         }
 
         .upload-card .file-btn:hover {
             transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99,102,241,0.35);
         }
 
         .upload-card .file-name {
-            margin-top: 10px;
-            color: #666;
-            font-size: 0.9rem;
+            margin-top: 12px;
+            color: var(--text-3);
+            font-size: 0.78rem;
         }
 
         .upload-card.loaded {
             border-style: solid;
-            border-color: #4caf50;
-            background: #f0fff4;
+            border-color: var(--success);
+            background: var(--success-light);
         }
 
-        .upload-card.loaded label {
-            color: #4caf50;
-        }
+        .upload-card.loaded .upload-title { color: var(--success); }
+        .upload-card.loaded .file-name { color: #065f46; }
 
+        /* ── FILTER ── */
         .filter-section {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
             display: none;
+            animation: scaleIn 0.3s ease both;
         }
 
-        .filter-section.visible {
-            display: block;
-        }
-
-        .filter-section h2 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 1.3rem;
-        }
+        .filter-section.visible { display: block; }
 
         .filter-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
             align-items: end;
         }
 
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-        }
+        .filter-group { display: flex; flex-direction: column; gap: 6px; }
 
         .filter-group label {
-            color: #666;
-            font-size: 0.9rem;
-            margin-bottom: 5px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
         }
 
         .filter-group input {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 1rem;
+            padding: 10px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.9rem;
+            color: var(--text-1);
+            background: var(--surface-2);
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+
+        .filter-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
         }
 
         .filter-buttons {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
-            margin-top: 15px;
+            margin-top: 18px;
         }
 
         .btn {
-            padding: 10px 20px;
+            padding: 10px 22px;
             border: none;
-            border-radius: 6px;
+            border-radius: 50px;
             cursor: pointer;
-            font-size: 1rem;
-            transition: all 0.2s ease;
+            font-family: inherit;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: all var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--accent-grad);
             color: white;
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 8px 20px rgba(99,102,241,0.35);
         }
 
         .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
+            background: var(--surface-2);
+            color: var(--text-2);
+            border: 1.5px solid var(--border);
         }
 
         .btn-secondary:hover {
-            background: #e0e0e0;
+            background: var(--border);
+            color: var(--text-1);
         }
 
         .btn-export {
-            background: #4caf50;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: white;
         }
 
         .btn-export:hover {
-            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(16,185,129,0.35);
         }
 
+        /* ── KPI ── */
         .kpi-section {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 25px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+            margin-bottom: 20px;
+            animation: fadeUp 0.5s 0.1s ease both;
         }
 
         .kpi-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-            transition: transform 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            transition: transform var(--transition), box-shadow var(--transition);
+        }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            top: 0; right: 0;
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: var(--accent-grad);
+            opacity: 0.06;
+            transform: translate(20px, -20px);
         }
 
         .kpi-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-xl);
+        }
+
+        .kpi-icon {
+            font-size: 1.4rem;
+            margin-bottom: 12px;
+            display: block;
         }
 
         .kpi-card h3 {
-            color: #666;
-            font-size: 0.9rem;
+            font-size: 0.68rem;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
+            letter-spacing: 1.5px;
+            color: var(--text-3);
+            margin-bottom: 8px;
         }
 
         .kpi-card .value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #333;
+            font-size: 2.6rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1;
+            color: var(--text-1);
+            margin-bottom: 6px;
         }
+
+        .kpi-card.positive .value { color: var(--success); }
+        .kpi-card.warning  .value { color: var(--warning); }
+        .kpi-card.quality  .value { color: var(--accent); }
 
         .kpi-card .subtext {
-            color: #888;
-            font-size: 0.9rem;
-            margin-top: 5px;
+            color: var(--text-3);
+            font-size: 0.78rem;
+            font-weight: 400;
         }
 
-        .kpi-card.positive .value {
-            color: #4caf50;
+        .kpi-bar {
+            height: 3px;
+            border-radius: 2px;
+            background: var(--border);
+            margin-top: 14px;
+            overflow: hidden;
         }
 
-        .kpi-card.warning .value {
-            color: #ff9800;
+        .kpi-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: var(--accent-grad);
+            transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
         }
 
+        .kpi-card.positive .kpi-bar-fill { background: linear-gradient(90deg, #10b981, #34d399); }
+        .kpi-card.warning  .kpi-bar-fill { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .kpi-card.quality  .kpi-bar-fill { background: var(--accent-grad); }
+
+        /* ── CHARTS ── */
         .charts-section {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            gap: 25px;
-            margin-bottom: 25px;
-        }
-
-        .chart-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+            animation: fadeUp 0.5s 0.15s ease both;
         }
 
         .chart-card h2 {
-            color: #333;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-1);
             margin-bottom: 20px;
-            font-size: 1.2rem;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .chart-container {
@@ -274,251 +442,313 @@
             height: 300px;
         }
 
+        /* ── TABLES ── */
         .tables-section {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            gap: 25px;
-            margin-bottom: 25px;
-        }
-
-        .table-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+            animation: fadeUp 0.5s 0.2s ease both;
         }
 
         .table-card h2 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 1.2rem;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #f0f0f0;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-1);
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .table-wrapper {
-            max-height: 420px;
+            max-height: 400px;
             overflow-y: auto;
-            border-radius: 10px;
-            border: 1px solid #e8e8e8;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #f0f0f0;
-        }
+        table { width: 100%; border-collapse: collapse; }
 
         th {
-            background: linear-gradient(135deg, #f8f9ff 0%, #e8eaff 100%);
-            color: #667eea;
-            font-weight: 600;
-            padding: 14px 12px;
+            background: var(--surface-2);
+            color: var(--text-2);
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 12px 14px;
+            text-align: left;
             position: sticky;
             top: 0;
             z-index: 10;
-            border-bottom: 2px solid #667eea;
+            border-bottom: 1.5px solid var(--border);
         }
 
-        th:first-child {
-            border-radius: 8px 0 0 0;
+        td {
+            padding: 11px 14px;
+            font-size: 0.875rem;
+            color: var(--text-2);
+            border-bottom: 1px solid var(--border);
         }
 
-        th:last-child {
-            border-radius: 0 8px 0 0;
-        }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background: var(--surface-2); }
+        tbody tr:hover td { color: var(--text-1); }
 
-        tr:hover {
-            background: #f8f9ff;
+        td:first-child {
+            font-weight: 600;
+            color: var(--text-3);
+            font-size: 0.78rem;
         }
 
         .badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 50px;
+            font-size: 0.73rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
         }
 
-        .badge-success {
-            background: #e8f5e9;
-            color: #4caf50;
+        .badge-success { background: var(--success-light); color: #065f46; }
+        .badge-danger  { background: var(--danger-light);  color: #991b1b; }
+        .badge-warning { background: var(--warning-light); color: #92400e; }
+        .badge-info    { background: var(--info-light);    color: #1e40af; }
+
+        /* Category pill in table */
+        .category-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--text-2);
         }
 
-        .badge-danger {
-            background: #ffebee;
-            color: #f44336;
-        }
-
-        .badge-warning {
-            background: #fff3e0;
-            color: #ff9800;
-        }
-
-        .badge-info {
-            background: #e3f2fd;
-            color: #2196f3;
-        }
-
+        /* ── GAPS ── */
         .gaps-section {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+            animation: fadeUp 0.5s 0.25s ease both;
         }
 
         .gaps-section h2 {
-            color: #333;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-1);
             margin-bottom: 20px;
-            font-size: 1.2rem;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .gap-group {
-            border: 1px solid #e0e0e0;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            margin-bottom: 12px;
         }
 
-        .gap-group h3 {
-            color: #667eea;
-            font-size: 1rem;
-            margin-bottom: 10px;
+        .gap-group-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 16px;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
         }
+
+        .gap-group-header h3 {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--text-1);
+            flex: 1;
+        }
+
+        .gap-count-chip {
+            background: var(--accent-light);
+            color: var(--accent);
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 50px;
+        }
+
+        .gap-group details { padding: 0 16px; }
+
+        .gap-group details summary {
+            cursor: pointer;
+            list-style: none;
+            padding: 10px 0;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--border);
+            transition: color var(--transition);
+            user-select: none;
+        }
+
+        .gap-group details:last-child summary { border-bottom: none; }
+        .gap-group details[open]:last-child summary { border-bottom: 1px solid var(--border); }
+
+        .gap-group details summary::-webkit-details-marker { display: none; }
+
+        .gap-group details summary::before {
+            content: '›';
+            font-size: 1.1rem;
+            color: var(--accent);
+            transition: transform var(--transition);
+            line-height: 1;
+        }
+
+        .gap-group details[open] summary::before { transform: rotate(90deg); }
+        .gap-group details summary:hover { color: var(--accent); }
 
         .gap-item {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid #f0f0f0;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 9px 0 9px 22px;
+            border-bottom: 1px solid var(--border);
         }
 
-        .gap-item:last-child {
-            border-bottom: none;
-        }
+        .gap-item:last-child { border-bottom: none; }
 
-        .gap-question {
-            color: #333;
-        }
-
-        .gap-meta {
-            font-size: 0.85rem;
-            color: #888;
-        }
+        .gap-question { color: var(--text-2); font-size: 0.85rem; }
+        .gap-meta { color: var(--text-3); font-size: 0.75rem; white-space: nowrap; }
 
         .no-data {
             text-align: center;
-            padding: 50px;
-            color: #888;
-            font-size: 1.1rem;
+            padding: 56px 20px;
+            color: var(--text-3);
+            font-size: 0.95rem;
         }
 
-        .hidden {
-            display: none !important;
+        .no-data-icon { font-size: 2.5rem; display: block; margin-bottom: 12px; }
+
+        .hidden { display: none !important; }
+
+        @media (max-width: 900px) {
+            .charts-section, .tables-section { grid-template-columns: 1fr; }
         }
 
-        @media (max-width: 768px) {
-            header h1 {
-                font-size: 1.8rem;
-            }
-
-            .charts-section,
-            .tables-section {
-                grid-template-columns: 1fr;
-            }
-
-            .kpi-card .value {
-                font-size: 2rem;
-            }
+        @media (max-width: 600px) {
+            body { padding: 16px 12px 40px; }
+            .kpi-section { grid-template-columns: 1fr 1fr; }
+            .kpi-card .value { font-size: 2rem; }
+            .card { padding: 18px; }
+            .filter-buttons { flex-direction: column; }
+            .btn { justify-content: center; }
         }
     </style>
 </head>
 <body>
 <div class="container">
+
     <header>
-        <h1>📊 Дашборд аналитики запросов</h1>
-        <p>РТУ МИРЭА — Ассистент для студентов</p>
+        <div class="header-inner">
+            <div class="header-badge">📊 Аналитика</div>
+            <h1>Дашборд <span>запросов</span> бота</h1>
+            <p>РТУ МИРЭА — Студенческий ассистент</p>
+        </div>
     </header>
 
-    <!-- Секция загрузки файлов -->
+    <!-- Загрузка -->
     <section class="upload-section">
-        <h2>📁 Загрузка данных</h2>
-        <div class="upload-grid">
-            <div class="upload-card" id="requests-upload">
-                <label for="requests-file">Requests (логи запросов)</label>
-                <input type="file" id="requests-file" accept=".jsonl,.json">
-                <label for="requests-file" class="file-btn">Выбрать файл</label>
-                <div class="file-name" id="requests-filename">Не выбран</div>
-            </div>
-            <div class="upload-card" id="suggestions-upload">
-                <label for="suggestions-file">Suggestions (предложения)</label>
-                <input type="file" id="suggestions-file" accept=".jsonl,.json">
-                <label for="suggestions-file" class="file-btn">Выбрать файл</label>
-                <div class="file-name" id="suggestions-filename">Не выбран</div>
+        <div class="card">
+            <div class="section-label">📁 Загрузка данных</div>
+            <div class="upload-grid">
+                <div class="upload-card" id="requests-upload">
+                    <span class="upload-icon">📋</span>
+                    <span class="upload-title">Requests</span>
+                    <span class="upload-hint">Логи запросов (.jsonl)</span>
+                    <input type="file" id="requests-file" accept=".jsonl,.json">
+                    <label for="requests-file" class="file-btn">⬆ Выбрать файл</label>
+                    <div class="file-name" id="requests-filename">Файл не выбран</div>
+                </div>
+                <div class="upload-card" id="suggestions-upload">
+                    <span class="upload-icon">💡</span>
+                    <span class="upload-title">Suggestions</span>
+                    <span class="upload-hint">Предложения студентов (.jsonl)</span>
+                    <input type="file" id="suggestions-file" accept=".jsonl,.json">
+                    <label for="suggestions-file" class="file-btn">⬆ Выбрать файл</label>
+                    <div class="file-name" id="suggestions-filename">Файл не выбран</div>
+                </div>
             </div>
         </div>
     </section>
 
-    <!-- Секция фильтра -->
-    <section class="filter-section" id="filter-section">
-        <h2>🔍 Фильтр по дате</h2>
+    <!-- Фильтр -->
+    <section class="filter-section card" id="filter-section">
+        <div class="section-label">🔍 Фильтр по дате</div>
         <div class="filter-grid">
             <div class="filter-group">
-                <label for="date-from">С даты:</label>
+                <label for="date-from">С даты</label>
                 <input type="date" id="date-from">
             </div>
             <div class="filter-group">
-                <label for="date-to">По дату:</label>
+                <label for="date-to">По дату</label>
                 <input type="date" id="date-to">
             </div>
         </div>
         <div class="filter-buttons">
-            <button class="btn btn-primary" onclick="applyFilter()">Применить</button>
-            <button class="btn btn-secondary" onclick="resetFilter()">Сбросить</button>
+            <button class="btn btn-primary" onclick="applyFilter()">✓ Применить</button>
+            <button class="btn btn-secondary" onclick="resetFilter()">↺ Сбросить</button>
             <button class="btn btn-export" onclick="exportToCSV()">📥 Экспорт в CSV</button>
         </div>
     </section>
 
-    <!-- KPI карточки -->
+    <!-- KPI -->
     <section class="kpi-section hidden" id="kpi-section">
-        <div class="kpi-card">
+        <div class="kpi-card card">
+            <span class="kpi-icon">📨</span>
             <h3>Всего запросов</h3>
             <div class="value" id="kpi-total">0</div>
             <div class="subtext">За выбранный период</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-total-bar" style="width:100%"></div></div>
         </div>
-        <div class="kpi-card positive">
+        <div class="kpi-card card positive">
+            <span class="kpi-icon">✅</span>
             <h3>% с ответом</h3>
             <div class="value" id="kpi-matched">0%</div>
             <div class="subtext">Нашлись в базе знаний</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-matched-bar" style="width:0%"></div></div>
         </div>
-        <div class="kpi-card positive">
+        <div class="kpi-card card positive">
+            <span class="kpi-icon">👍</span>
             <h3>% «Помогло»</h3>
             <div class="value" id="kpi-helpful">0%</div>
             <div class="subtext">Из оставивших отзыв</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-helpful-bar" style="width:0%"></div></div>
         </div>
-        <div class="kpi-card warning">
-            <h3>Пробелов</h3>
-            <div class="value" id="kpi-gaps">0</div>
-            <div class="subtext">Вопросов без ответа</div>
+        <div class="kpi-card card quality">
+            <span class="kpi-icon">⭐</span>
+            <h3>Индекс качества</h3>
+            <div class="value" id="kpi-quality">0%</div>
+            <div class="subtext">Среднее (ответ + польза)</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-quality-bar" style="width:0%"></div></div>
         </div>
     </section>
 
     <!-- Графики -->
     <section class="charts-section hidden" id="charts-section">
-        <div class="chart-card">
+        <div class="chart-card card">
             <h2>📈 Запросы по дням</h2>
             <div class="chart-container">
                 <canvas id="requests-by-day-chart"></canvas>
             </div>
         </div>
-        <div class="chart-card">
-            <h2>🕐 Запросы по часам</h2>
+        <div class="chart-card card">
+            <h2>🕐 Активность по часам</h2>
             <div class="chart-container">
                 <canvas id="requests-by-hour-chart"></canvas>
             </div>
@@ -527,7 +757,7 @@
 
     <!-- Таблицы -->
     <section class="tables-section hidden" id="tables-section">
-        <div class="table-card">
+        <div class="table-card card">
             <h2>🏆 Топ-10 частых вопросов</h2>
             <div class="table-wrapper">
                 <table>
@@ -535,106 +765,110 @@
                     <tr>
                         <th>#</th>
                         <th>Вопрос</th>
-                        <th>Количество</th>
-                        <th>Ответов, %</th>
+                        <th>Кол-во</th>
+                        <th>Ответов</th>
                     </tr>
                     </thead>
-                    <tbody id="top-questions-body">
-                    </tbody>
+                    <tbody id="top-questions-body"></tbody>
                 </table>
             </div>
         </div>
-        <div class="table-card">
-            <h2>📊 Статистика по категориям</h2>
+        <div class="table-card card">
+            <h2>🗂 Статистика по категориям</h2>
             <div class="table-wrapper">
                 <table>
                     <thead>
                     <tr>
                         <th>Категория</th>
-                        <th>Количество</th>
+                        <th>Кол-во</th>
                         <th>Доля</th>
                     </tr>
                     </thead>
-                    <tbody id="categories-body">
-                    </tbody>
+                    <tbody id="categories-body"></tbody>
                 </table>
             </div>
         </div>
     </section>
 
     <!-- Пробелы -->
-    <section class="gaps-section hidden" id="gaps-section">
-        <h2>⚠️ Пробелы в базе знаний</h2>
+    <section class="gaps-section card hidden" id="gaps-section">
+        <h2>⚠️ Пробелы в базе знаний <span id="gaps-count-badge" class="gap-count-chip" style="display:none"></span></h2>
         <div id="gaps-content">
-            <div class="no-data">Загрузите suggestions.jsonl для просмотра пробелов</div>
+            <div class="no-data">
+                <span class="no-data-icon">📭</span>
+                Загрузите suggestions.jsonl для просмотра пробелов
+            </div>
         </div>
     </section>
+
 </div>
 
 <script>
-    // Глобальные переменные
     let requestsData = [];
     let suggestionsData = [];
     let filteredRequests = [];
     let dayChart = null;
     let hourChart = null;
 
-    // Категории для классификации вопросов
+    // Chart.js global style
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = '#6b7280';
+
     const CATEGORIES = {
-        'экзамены': ['экзамен', 'пересдач', 'сессия', 'ведомость', 'лаб', 'курсач', 'госы', 'зачет'],
-        'преподаватели': ['преподаватель', 'препод', 'учитель', 'лектор', 'кабинет', 'консультаци'],
-        'навигация': ['где', 'как пройти', 'расписани', 'корпус', 'аудитори', 'столов', 'библиотек', 'деканат'],
-        'учебный_процесс': ['стипенди', 'справк', 'академ', 'восстанов', 'электив', 'кредит', 'зачетк'],
-        'ит_системы': ['сайт', 'lms', 'moodle', 'wi-fi', 'wifi', 'почт', 'vpn', 'портал', 'компьютер'],
-        'бюрократия': ['документ', 'заявлен', 'пропуск', 'военкомат', 'отсрочк', 'справк', 'помощь'],
-        'общежитие': ['общежит', 'комнат', 'заселени', 'прачечн', 'сосед', 'койк']
+        'экзамены':        ['экзамен','пересдач','сессия','ведомость','лаб','курсач','госы','зачет'],
+        'преподаватели':   ['преподаватель','препод','учитель','лектор','кабинет','консультаци'],
+        'навигация':       ['где','как пройти','расписани','корпус','аудитори','столов','библиотек','деканат'],
+        'учебный_процесс': ['стипенди','справк','академ','восстанов','электив','кредит','зачетк'],
+        'ит_системы':      ['сайт','lms','moodle','wi-fi','wifi','почт','vpn','портал','компьютер'],
+        'бюрократия':      ['документ','заявлен','пропуск','военкомат','отсрочк','справк','помощь'],
+        'общежитие':       ['общежит','комнат','заселени','прачечн','сосед','койк']
     };
 
-    // Инициализация загрузчиков файлов
+    const CAT_ICONS = {
+        'экзамены':'📝','преподаватели':'👨‍🏫','навигация':'🗺',
+        'учебный_процесс':'📚','ит_системы':'💻','бюрократия':'📄',
+        'общежитие':'🏠','другое':'❓'
+    };
+
     document.getElementById('requests-file').addEventListener('change', handleRequestsFile);
     document.getElementById('suggestions-file').addEventListener('change', handleSuggestionsFile);
 
     async function handleRequestsFile(event) {
         const file = event.target.files[0];
         if (!file) return;
-
         try {
             document.getElementById('requests-filename').textContent = file.name;
             document.getElementById('requests-upload').classList.add('loaded');
-
             const content = await readFile(file);
             requestsData = parseJsonl(content);
             filteredRequests = [...requestsData];
-
             showDashboard();
             updateDashboard();
-        } catch (error) {
-            console.error('Ошибка при загрузке requests:', error);
-            alert('Ошибка при загрузке файла: ' + error.message);
+        } catch (err) {
+            console.error('Ошибка при загрузке requests:', err);
+            alert('Ошибка при загрузке файла: ' + err.message);
         }
     }
 
     async function handleSuggestionsFile(event) {
         const file = event.target.files[0];
         if (!file) return;
-
         try {
             document.getElementById('suggestions-filename').textContent = file.name;
             document.getElementById('suggestions-upload').classList.add('loaded');
-
             const content = await readFile(file);
             suggestionsData = parseJsonl(content);
-
             showDashboard();
             updateGaps();
             updateKPI();
-        } catch (error) {
-            console.error('Ошибка при загрузке suggestions:', error);
-            alert('Ошибка при загрузке файла: ' + error.message);
+        } catch (err) {
+            console.error('Ошибка при загрузке suggestions:', err);
+            alert('Ошибка при загрузке файла: ' + err.message);
         }
     }
 
-    async function readFile(file) {
+    function readFile(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve(e.target.result);
@@ -644,15 +878,9 @@
     }
 
     function parseJsonl(content) {
-        const lines = content.trim().split('\n');
-        return lines.map(line => {
-            try {
-                return JSON.parse(line);
-            } catch (e) {
-                console.error('Ошибка парсинга JSON:', line);
-                return null;
-            }
-        }).filter(item => item !== null);
+        return content.trim().split('\n').map(line => {
+            try { return JSON.parse(line); } catch { return null; }
+        }).filter(Boolean);
     }
 
     function showDashboard() {
@@ -662,11 +890,11 @@
         document.getElementById('tables-section').classList.remove('hidden');
         document.getElementById('gaps-section').classList.remove('hidden');
 
-        // Устанавливаем даты фильтра
+        // Bug fix: use sort() instead of Math.min/max on strings
         if (requestsData.length > 0) {
-            const dates = requestsData.map(r => r.timestamp.substring(0, 10));
-            document.getElementById('date-from').value = Math.min(...dates);
-            document.getElementById('date-to').value = Math.max(...dates);
+            const dates = [...requestsData.map(r => r.timestamp.substring(0, 10))].sort();
+            document.getElementById('date-from').value = dates[0];
+            document.getElementById('date-to').value = dates.at(-1);
         }
     }
 
@@ -678,27 +906,74 @@
         updateGaps();
     }
 
+    function animateCounter(id, target, suffix) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const duration = 800;
+        const start = performance.now();
+        const from = parseInt(el.dataset.prev || '0', 10);
+        el.dataset.prev = target;
+
+        function tick(now) {
+            const t = Math.min((now - start) / duration, 1);
+            const eased = 1 - Math.pow(1 - t, 3);
+            el.textContent = Math.round(from + (target - from) * eased) + suffix;
+            if (t < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+    }
+
     function updateKPI() {
         const total = filteredRequests.length;
         const matched = filteredRequests.filter(r => r.matched).length;
         const matchedPercent = total > 0 ? Math.round((matched / total) * 100) : 0;
 
-        const withHelpful = filteredRequests.filter(r => r.helpful !== null);
+        const withHelpful = filteredRequests.filter(r => r.helpful !== null && r.helpful !== undefined);
         const helpfulCount = withHelpful.filter(r => r.helpful === true).length;
         const helpfulPercent = withHelpful.length > 0
-            ? Math.round((helpfulCount / withHelpful.length) * 100)
-            : 0;
+            ? Math.round((helpfulCount / withHelpful.length) * 100) : 0;
 
-        const gaps = suggestionsData.filter(s => s.type === 'new_question').length;
+        const qualityIndex = Math.round((matchedPercent + helpfulPercent) / 2);
 
-        document.getElementById('kpi-total').textContent = total;
-        document.getElementById('kpi-matched').textContent = matchedPercent + '%';
-        document.getElementById('kpi-helpful').textContent = helpfulPercent + '%';
-        document.getElementById('kpi-gaps').textContent = gaps;
+        // Bug fix: filter suggestions by selected date range
+        const dateFrom = document.getElementById('date-from').value;
+        const dateTo   = document.getElementById('date-to').value;
+        const filteredSuggestions = suggestionsData.filter(s => {
+            if (!dateFrom || !dateTo) return true;
+            const d = s.timestamp.substring(0, 10);
+            return d >= dateFrom && d <= dateTo;
+        });
+        const gaps = filteredSuggestions.filter(s => s.type === 'new_question').length;
+
+        animateCounter('kpi-total',   total,         '');
+        animateCounter('kpi-matched', matchedPercent,'%');
+        animateCounter('kpi-helpful', helpfulPercent,'%');
+        animateCounter('kpi-quality', qualityIndex,  '%');
+
+        // Animate progress bars
+        setTimeout(() => {
+            const setBar = (id, pct) => {
+                const el = document.getElementById(id);
+                if (el) el.style.width = Math.min(pct, 100) + '%';
+            };
+            setBar('kpi-matched-bar', matchedPercent);
+            setBar('kpi-helpful-bar', helpfulPercent);
+            setBar('kpi-quality-bar', qualityIndex);
+        }, 100);
+
+        // Update gaps badge
+        const badge = document.getElementById('gaps-count-badge');
+        if (badge) {
+            if (gaps > 0) {
+                badge.textContent = gaps + ' вопросов';
+                badge.style.display = 'inline-flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
     }
 
     function updateCharts() {
-        // Запросы по дням
         const byDay = {};
         filteredRequests.forEach(r => {
             const day = r.timestamp.substring(0, 10);
@@ -722,28 +997,57 @@
                 datasets: [{
                     label: 'Запросов',
                     data: dayValues,
-                    borderColor: '#667eea',
-                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    borderColor: '#6366f1',
+                    backgroundColor: (ctx) => {
+                        const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 280);
+                        g.addColorStop(0, 'rgba(99,102,241,0.22)');
+                        g.addColorStop(1, 'rgba(139,92,246,0.0)');
+                        return g;
+                    },
                     fill: true,
-                    tension: 0.4
+                    tension: 0.45,
+                    pointBackgroundColor: '#6366f1',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
+                    borderWidth: 2.5,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: { duration: 700 },
                 plugins: {
-                    legend: {display: false}
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1e1b4b',
+                        borderColor: 'rgba(99,102,241,0.3)',
+                        borderWidth: 1,
+                        titleColor: '#a5b4fc',
+                        bodyColor: '#e0e7ff',
+                        padding: 12,
+                        cornerRadius: 10,
+                    }
                 },
                 scales: {
-                    y: {beginAtZero: true}
+                    x: {
+                        ticks: { color: '#9ca3af', font: { size: 11 }, maxRotation: 45 },
+                        grid: { color: 'rgba(99,102,241,0.07)' },
+                        border: { color: 'rgba(99,102,241,0.12)' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#9ca3af', font: { size: 11 } },
+                        grid: { color: 'rgba(99,102,241,0.07)' },
+                        border: { color: 'rgba(99,102,241,0.12)' }
+                    }
                 }
             }
         });
 
-        // Запросы по часам
         const byHour = {};
         for (let i = 0; i < 24; i++) byHour[i] = 0;
-
         filteredRequests.forEach(r => {
             const hour = parseInt(r.timestamp.substring(11, 13));
             byHour[hour]++;
@@ -759,92 +1063,107 @@
                 datasets: [{
                     label: 'Запросов',
                     data: Object.values(byHour),
-                    backgroundColor: 'rgba(118, 75, 162, 0.7)',
-                    borderColor: '#764ba2',
-                    borderWidth: 1
+                    backgroundColor: (ctx) => {
+                        const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 270);
+                        g.addColorStop(0, 'rgba(99,102,241,0.85)');
+                        g.addColorStop(1, 'rgba(139,92,246,0.35)');
+                        return g;
+                    },
+                    borderWidth: 0,
+                    borderRadius: 6,
+                    borderSkipped: false,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: { duration: 700 },
                 plugins: {
-                    legend: {display: false}
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1e1b4b',
+                        borderColor: 'rgba(99,102,241,0.3)',
+                        borderWidth: 1,
+                        titleColor: '#a5b4fc',
+                        bodyColor: '#e0e7ff',
+                        padding: 12,
+                        cornerRadius: 10,
+                    }
                 },
                 scales: {
-                    y: {beginAtZero: true}
+                    x: {
+                        ticks: { color: '#9ca3af', font: { size: 10 }, maxRotation: 0 },
+                        grid: { display: false },
+                        border: { color: 'rgba(99,102,241,0.12)' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#9ca3af', font: { size: 11 } },
+                        grid: { color: 'rgba(99,102,241,0.07)' },
+                        border: { color: 'rgba(99,102,241,0.12)' }
+                    }
                 }
             }
         });
     }
 
     function updateTopQuestions() {
-        // Группируем вопросы
         const questionStats = {};
         filteredRequests.forEach(r => {
             const query = r.query.toLowerCase().trim();
-            if (!questionStats[query]) {
-                questionStats[query] = {count: 0, matched: 0};
-            }
+            if (!questionStats[query]) questionStats[query] = {count: 0, matched: 0};
             questionStats[query].count++;
             if (r.matched) questionStats[query].matched++;
         });
 
-        // Сортируем по частоте
         const sorted = Object.entries(questionStats)
             .sort((a, b) => b[1].count - a[1].count)
             .slice(0, 10);
 
-        const tbody = document.getElementById('top-questions-body');
-        tbody.innerHTML = sorted.map(([question, stats], index) => {
-            const matchedPercent = Math.round((stats.matched / stats.count) * 100);
-            const badgeClass = matchedPercent >= 80 ? 'badge-success' :
-                matchedPercent >= 50 ? 'badge-warning' : 'badge-danger';
-
-            return `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${escapeHtml(question)}</td>
-                        <td>${stats.count}</td>
-                        <td><span class="badge ${badgeClass}">${matchedPercent}%</span></td>
-                    </tr>
-                `;
+        document.getElementById('top-questions-body').innerHTML = sorted.map(([q, s], i) => {
+            const pct = Math.round((s.matched / s.count) * 100);
+            const cls = pct >= 80 ? 'badge-success' : pct >= 50 ? 'badge-warning' : 'badge-danger';
+            return `<tr>
+                <td>${i + 1}</td>
+                <td style="color:var(--text-1);font-weight:500;font-size:0.85rem">${escapeHtml(q)}</td>
+                <td style="font-weight:600;color:var(--text-1)">${s.count}</td>
+                <td><span class="badge ${cls}">${pct}%</span></td>
+            </tr>`;
         }).join('');
     }
 
     function updateCategories() {
-        const categoryStats = {};
-
+        const stats = {};
         filteredRequests.forEach(r => {
-            const category = categorizeQuery(r.query);
-            categoryStats[category] = (categoryStats[category] || 0) + 1;
+            const cat = categorizeQuery(r.query);
+            stats[cat] = (stats[cat] || 0) + 1;
         });
 
         const total = filteredRequests.length;
-        const sorted = Object.entries(categoryStats)
-            .sort((a, b) => b[1] - a[1]);
+        const sorted = Object.entries(stats).sort((a, b) => b[1] - a[1]);
 
-        const tbody = document.getElementById('categories-body');
-        tbody.innerHTML = sorted.map(([category, count]) => {
-            const percent = Math.round((count / total) * 100);
-            return `
-                    <tr>
-                        <td>${category}</td>
-                        <td>${count}</td>
-                        <td>${percent}%</td>
-                    </tr>
-                `;
+        document.getElementById('categories-body').innerHTML = sorted.map(([cat, count]) => {
+            const pct = Math.round((count / total) * 100);
+            const icon = CAT_ICONS[cat] || '❓';
+            return `<tr>
+                <td><span class="category-pill">${icon} ${cat}</span></td>
+                <td style="font-weight:600;color:var(--text-1)">${count}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;min-width:60px">
+                            <div style="height:100%;width:${pct}%;background:var(--accent-grad);border-radius:2px"></div>
+                        </div>
+                        <span style="font-size:0.78rem;font-weight:600;color:var(--text-2)">${pct}%</span>
+                    </div>
+                </td>
+            </tr>`;
         }).join('');
     }
 
     function categorizeQuery(query) {
-        const queryLower = query.toLowerCase();
-
-        for (const [category, keywords] of Object.entries(CATEGORIES)) {
-            for (const keyword of keywords) {
-                if (queryLower.includes(keyword)) {
-                    return category;
-                }
-            }
+        const q = query.toLowerCase();
+        for (const [cat, kws] of Object.entries(CATEGORIES)) {
+            if (kws.some(kw => q.includes(kw))) return cat;
         }
         return 'другое';
     }
@@ -876,83 +1195,96 @@
             }
             clusters.push(cluster.map(idx => items[idx]));
         }
-        // Сортируем кластеры по размеру (большие — первые)
         clusters.sort((a, b) => b.length - a.length);
         return clusters;
     }
 
     function updateGaps() {
+        // Bug fix: filter suggestions by date range
+        const dateFrom = document.getElementById('date-from').value;
+        const dateTo   = document.getElementById('date-to').value;
+        const activeSuggestions = suggestionsData.filter(s => {
+            if (!dateFrom || !dateTo) return true;
+            const d = s.timestamp.substring(0, 10);
+            return d >= dateFrom && d <= dateTo;
+        });
+
         if (suggestionsData.length === 0) {
             document.getElementById('gaps-content').innerHTML = `
-                    <div class="no-data">Файл suggestions.jsonl не загружен</div>
-                `;
+                <div class="no-data">
+                    <span class="no-data-icon">📭</span>
+                    Файл suggestions.jsonl не загружен
+                </div>`;
             return;
         }
 
-        const newQuestions = suggestionsData.filter(s => s.type === 'new_question');
-        const withAnswers = suggestionsData.filter(s => s.type !== 'new_question');
+        if (activeSuggestions.length === 0) {
+            document.getElementById('gaps-content').innerHTML = `
+                <div class="no-data">
+                    <span class="no-data-icon">🔍</span>
+                    Нет данных за выбранный период
+                </div>`;
+            return;
+        }
 
+        const newQuestions = activeSuggestions.filter(s => s.type === 'new_question');
+        const withAnswers  = activeSuggestions.filter(s => s.type !== 'new_question');
         let html = '';
 
         if (newQuestions.length > 0) {
             const clusters = clusterBySimilarity(newQuestions);
-            html += `<div class="gap-group"><h3>🆕 Новые вопросы (${newQuestions.length})</h3>`;
-            clusters.forEach((cluster, idx) => {
+            html += `
+            <div class="gap-group">
+                <div class="gap-group-header">
+                    <h3>🆕 Новые вопросы без ответа</h3>
+                    <span class="gap-count-chip">${newQuestions.length}</span>
+                </div>`;
+            clusters.forEach(cluster => {
                 const label = cluster.length > 1
-                    ? `Похожие вопросы (${cluster.length})`
-                    : 'Уникальный вопрос';
-                html += `
-                    <details ${cluster.length > 1 ? 'open' : ''} style="margin-bottom:8px;">
-                        <summary style="cursor:pointer;font-weight:500;padding:4px 0;">
-                            ${escapeHtml(label)}: ${escapeHtml(cluster[0].question)}
-                        </summary>
-                        ${cluster.map(s => `
-                            <div class="gap-item" style="margin-left:16px;">
-                                <span class="gap-question">${escapeHtml(s.question)}</span>
-                                <span class="gap-meta">${escapeHtml(s.user)} • ${formatDate(s.timestamp)}</span>
-                            </div>
-                        `).join('')}
-                    </details>`;
+                    ? `Похожие вопросы (${cluster.length}): ${escapeHtml(cluster[0].question)}`
+                    : `${escapeHtml(cluster[0].question)}`;
+                html += `<details ${cluster.length > 1 ? 'open' : ''}>
+                    <summary>${label}</summary>
+                    ${cluster.map(s => `
+                        <div class="gap-item">
+                            <span class="gap-question">${escapeHtml(s.question)}</span>
+                            <span class="gap-meta">${escapeHtml(s.user)} · ${formatDate(s.timestamp)}</span>
+                        </div>`).join('')}
+                </details>`;
             });
             html += '</div>';
         }
 
         if (withAnswers.length > 0) {
             html += `
-                    <div class="gap-group">
-                        <h3>💡 Предложения с ответами (${withAnswers.length})</h3>
-                        ${withAnswers.map(s => `
-                            <div class="gap-item">
-                                <div style="flex: 1;">
-                                    <span class="gap-question">${escapeHtml(s.question)}</span>
-                                    <div class="gap-meta" style="color: #4caf50; margin-top: 4px;">${escapeHtml(s.answer || '')}</div>
-                                </div>
-                                <span class="gap-meta">${escapeHtml(s.user)} • ${formatDate(s.timestamp)}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
+            <div class="gap-group">
+                <div class="gap-group-header">
+                    <h3>💡 Предложения с ответами</h3>
+                    <span class="gap-count-chip">${withAnswers.length}</span>
+                </div>
+                ${withAnswers.map(s => `
+                    <div class="gap-item" style="padding-left:16px;padding-right:16px">
+                        <div style="flex:1;min-width:0;overflow:hidden">
+                            <div class="gap-question">${escapeHtml(s.question)}</div>
+                            ${s.answer ? `<div class="gap-meta" style="color:var(--success);margin-top:3px">${escapeHtml(s.answer)}</div>` : ''}
+                        </div>
+                        <span class="gap-meta" style="flex-shrink:0">${escapeHtml(s.user)} · ${formatDate(s.timestamp)}</span>
+                    </div>`).join('')}
+            </div>`;
         }
 
         document.getElementById('gaps-content').innerHTML = html || `
-                <div class="no-data">Нет данных о пробелах</div>
-            `;
+            <div class="no-data"><span class="no-data-icon">✅</span>Нет пробелов в базе знаний</div>`;
     }
 
     function applyFilter() {
         const dateFrom = document.getElementById('date-from').value;
-        const dateTo = document.getElementById('date-to').value;
-
-        if (!dateFrom || !dateTo) {
-            alert('Выберите даты для фильтра');
-            return;
-        }
-
+        const dateTo   = document.getElementById('date-to').value;
+        if (!dateFrom || !dateTo) { alert('Выберите даты для фильтра'); return; }
         filteredRequests = requestsData.filter(r => {
-            const date = r.timestamp.substring(0, 10);
-            return date >= dateFrom && date <= dateTo;
+            const d = r.timestamp.substring(0, 10);
+            return d >= dateFrom && d <= dateTo;
         });
-
         updateDashboard();
     }
 
@@ -964,64 +1296,50 @@
     }
 
     function exportToCSV() {
-        if (filteredRequests.length === 0) {
-            alert('Нет данных для экспорта');
-            return;
-        }
+        if (filteredRequests.length === 0) { alert('Нет данных для экспорта'); return; }
 
-        // Собираем рекомендации: вопросы с низким % matched
-        const questionStats = {};
+        const stats = {};
         filteredRequests.forEach(r => {
-            const query = r.query.toLowerCase().trim();
-            if (!questionStats[query]) {
-                questionStats[query] = {count: 0, matched: 0};
-            }
-            questionStats[query].count++;
-            if (r.matched) questionStats[query].matched++;
+            const q = r.query.toLowerCase().trim();
+            if (!stats[q]) stats[q] = {count: 0, matched: 0};
+            stats[q].count++;
+            if (r.matched) stats[q].matched++;
         });
 
-        // Сортируем по частоте и низкому % matched
-        const recommendations = Object.entries(questionStats)
-            .map(([question, stats]) => ({
+        const recommendations = Object.entries(stats)
+            .map(([question, s]) => ({
                 question,
-                count: stats.count,
-                matchedPercent: Math.round((stats.matched / stats.count) * 100),
-                priority: stats.count * (1 - stats.matched / stats.count)
+                count: s.count,
+                matchedPercent: Math.round((s.matched / s.count) * 100),
+                priority: s.count * (1 - s.matched / s.count)
             }))
             .sort((a, b) => b.priority - a.priority);
 
-        // Генерируем CSV
-        const csvContent = [
-            ['question', 'count', 'matched_percent', 'priority'].join(','),
+        const csv = [
+            ['question','count','matched_percent','priority'].join(','),
             ...recommendations.map(r => [
                 `"${r.question.replace(/"/g, '""')}"`,
-                r.count,
-                r.matchedPercent,
-                r.priority.toFixed(2)
+                r.count, r.matchedPercent, r.priority.toFixed(2)
             ].join(','))
         ].join('\n');
 
-        // Скачиваем файл
-        const blob = new Blob(['\uFEFF' + csvContent], {type: 'text/csv;charset=utf-8;'});
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'recommendations.csv';
-        link.click();
+        const blob = new Blob(['﻿' + csv], {type: 'text/csv;charset=utf-8;'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'recommendations.csv';
+        a.click();
     }
 
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        if (text == null) return '';
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
     }
 
     function formatDate(timestamp) {
-        const date = new Date(timestamp);
-        return date.toLocaleDateString('ru-RU', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit'
+        return new Date(timestamp).toLocaleDateString('ru-RU', {
+            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
         });
     }
 </script>
