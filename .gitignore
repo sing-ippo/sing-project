@@ -7,3 +7,4 @@ __pycache__/
 requests.jsonl
 suggestions.jsonl
 output/
+*.env

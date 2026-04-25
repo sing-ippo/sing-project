@@ -1,172 +1,282 @@
 import argparse
 import json
 import os
-import sys
+from typing import Any, Dict, List
 from dotenv import load_dotenv
+
 load_dotenv()
-def load_txt(path):
+
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash")
+
+def load_txt(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
-def load_pdf(path):
+
+def load_pdf(path: str) -> str:
     try:
         import PyPDF2
     except ImportError:
-        print("Необходимо установть PyPDF2: pip install PyPDF2")
-        sys.exit(1)
+        print("[Ошибка] Не установлена библиотека: pip install PyPDF2")
+        return ""
+
     text = ""
-    with open(path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
-        for page in reader.pages:
-            text += page.extract_text() + "\n"
+    try:
+        with open(path, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            for page in reader.pages:
+                text += (page.extract_text() or "") + "\n"
+    except Exception as e:
+        print(f"[Ошибка] Чтение PDF: {e}")
     return text
-def load_docx(path):
+
+def load_docx(path: str) -> str:
     try:
         import docx
     except ImportError:
-        print("Необходимо установть python-docx: pip install python-docx")
-        sys.exit(1)
-    doc = docx.Document(path)
-    return "\n".join([p.text for p in doc.paragraphs])
-def load_document(path):
+        print("[Ошибка] Не установлена библиотека: pip install python-docx")
+        return ""
+
+    try:
+        doc = docx.Document(path)
+        return "\n".join([p.text for p in doc.paragraphs])
+    except Exception as e:
+        print(f"[Ошибка] Чтение DOCX: {e}")
+        return ""
+
+def load_document(path: str) -> str:
     if not os.path.exists(path):
-        print(f"Файл не найден: {path}")
-        sys.exit(1)
-    max_size = 50 * 1024  # 50 KB
+        print(f"[!] Файл не найден: {path}")
+        return ""
+
+    max_size = 50 * 1024
     file_size = os.path.getsize(path)
     if file_size > max_size:
-        print(f"Файл слишком большой ({file_size} байт). Максимум — 50 KB")
-        sys.exit(1)
-    if not (path.endswith(".txt") or path.endswith(".pdf") or path.endswith(".docx")):
-        print("Неподдерживаемый формат файла. Используй .txt, .pdf или .docx")
-        sys.exit(1)
-    if path.endswith(".txt"):
+        print(f"[!] Файл слишком большой ({file_size} байт). Лимит — 50 KB.")
+        return ""
+
+    lower_path = path.lower()
+    if not (lower_path.endswith(".txt") or lower_path.endswith(".pdf") or lower_path.endswith(".docx")):
+        print("[!] Формат не поддерживается (.txt, .pdf, .docx)")
+        return ""
+
+    text = ""
+    if lower_path.endswith(".txt"):
         text = load_txt(path)
-    elif path.endswith(".pdf"):
+    elif lower_path.endswith(".pdf"):
         text = load_pdf(path)
-    elif path.endswith(".docx"):
+    elif lower_path.endswith(".docx"):
         text = load_docx(path)
+
     if not text or not text.strip():
-        print("Файл пустой или не содержит текста")
-        sys.exit(1)
+        print("[!] Файл пустой или не содержит извлекаемого текста.")
+        return ""
+
     return text
 
-def chunk_text(text, chunk_size=400, overlap=50):
+def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> List[Dict[str, Any]]:
     words = text.split()
-    chunks = []
+    chunks: List[Dict[str, Any]] = []
     start = 0
     chunk_id = 0
+
     while start < len(words):
         end = start + chunk_size
         chunk_words = words[start:end]
-        chunks.append({
-            "id": chunk_id,
-            "text": " ".join(chunk_words)
-        })
+        chunks.append({"id": chunk_id, "text": " ".join(chunk_words)})
         start += chunk_size - overlap
         chunk_id += 1
+
     return chunks
 
-def save_chunks(chunks, output_path):
+def save_chunks(chunks: List[Dict[str, Any]], output_path: str) -> None:
     with open(output_path, "w", encoding="utf-8") as f:
         for chunk in chunks:
             f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
-def generate_quiz(text, num_questions=5):
+def _get_gemini_client():
     try:
         from google import genai
     except ImportError:
-        print("Необходимо установить библиотеку: pip install google-generativeai")
-        return []
+        print("[Ошибка] Не установлена библиотека: pip install google-generativeai")
+        return None
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        print("GEMINI_API_KEY не найден")
+        print("[Ошибка] Переменная GEMINI_API_KEY не задана.")
+        return None
+
+    return genai.Client(api_key=api_key)
+
+def _extract_json_array(raw_text: str) -> List[Dict[str, Any]]:
+    if not raw_text:
         return []
 
-    client = genai.Client(api_key=api_key)
+    start = raw_text.find("[")
+    end = raw_text.rfind("]") + 1
+    if start == -1 or end == 0:
+        return []
+
+    try:
+        data = json.loads(raw_text[start:end])
+    except Exception:
+        return []
+
+    if isinstance(data, list):
+        return data
+    return []
+
+def _normalize_quiz(quiz: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+
+    for idx, item in enumerate(quiz, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        normalized.append({
+            "id": item.get("id", idx),
+            "question": item.get("question", ""),
+            "options": item.get("options", []),
+            "correct": item.get("correct", 0),
+            "explanation": item.get("explanation", ""),
+            "source_chunk_id": item.get("source_chunk_id", None),
+        })
+
+    return normalized
+
+def generate_quiz(text: str, num_questions: int = 5) -> List[Dict[str, Any]]:
+    client = _get_gemini_client()
+    if client is None:
+        return []
 
     prompt = f"""
-Создай {num_questions} вопросов с множественным выбором.
+Создай {num_questions} тестовых вопросов по тексту.
 
-Формат JSON:
-[
-  {{
-    "id": ...
-    "question": "...",
-    "options": ["...", "...", "...", "..."],
-    "correct": 0,
-    "explanation": "...",
-    "source_chunk_id": 0
-  }}
-]
+Требования:
+- Верни строго JSON-массив.
+- Каждый объект должен содержать поля:
+  id, question, options, correct, explanation, source_chunk_id.
+- question и explanation должны быть на русском языке.
+- options — список из 4 вариантов ответа.
+- correct — индекс правильного ответа: 0, 1, 2 или 3.
+- source_chunk_id — это id чанка из текста вида [ID:<номер>]. Если определить нельзя, поставь null.
+- Не добавляй markdown, комментарии или пояснения вне JSON.
 
 Текст:
 {text}
 """
 
     try:
-        response = client.models.generate_content(
-            model='models/gemini-2.5-flash',
-            contents=prompt
-        )
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        quiz = _extract_json_array(getattr(response, "text", ""))
+        if not quiz:
+            print("[Ошибка] Нейросеть вернула пустой или некорректный JSON.")
+            return []
+        return _normalize_quiz(quiz)
     except Exception as e:
-        print(f"Ошибка Gemini API: {e}")
+        print(f"[Ошибка] Нейросеть не смогла создать квиз: {e}")
         return []
 
-    if not response.text:
+def generate_quiz_from_faq(entries: list, num_questions: int = 5) -> List[Dict[str, Any]]:
+    """
+    Принимает список FAQ-записей и возвращает квиз в том же формате,
+    что и generate_quiz().
+    """
+    if not entries:
+        print("[!] FAQ-записи не переданы.")
         return []
 
-    quiz_text = response.text
+    prepared_entries = []
+    for idx, entry in enumerate(entries, start=1):
+        if isinstance(entry, dict):
+            category = entry.get("category", "")
+            question = entry.get("question", entry.get("q", ""))
+            answer = entry.get("answer", entry.get("a", ""))
+            prepared_entries.append(
+                f"Запись {idx}\nКатегория: {category}\nВопрос: {question}\nОтвет: {answer}"
+            )
+        else:
+            prepared_entries.append(f"Запись {idx}: {str(entry)}")
 
-    start = quiz_text.find("[")
-    end = quiz_text.rfind("]") + 1
-
-    if start == -1 or end == 0:
+    faq_context = "\n\n".join(prepared_entries)
+    client = _get_gemini_client()
+    if client is None:
         return []
+
+    prompt = f"""
+На основе этих FAQ-вопросов и ответов составь {num_questions} тестовых вопросов для студентов.
+
+Требования:
+- Верни строго JSON-массив.
+- Каждый объект должен содержать поля:
+  id, question, options, correct, explanation, source_chunk_id.
+- question и explanation должны быть на русском языке.
+- options — список из 4 вариантов ответа.
+- correct — индекс правильного ответа: 0, 1, 2 или 3.
+- Поскольку источник не из чанков документа, source_chunk_id всегда должен быть null.
+- Не добавляй markdown, комментарии или пояснения вне JSON.
+
+FAQ-записи:
+{faq_context}
+"""
 
     try:
-        quiz = json.loads(quiz_text[start:end])
-    except:
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        quiz = _extract_json_array(getattr(response, "text", ""))
+        if not quiz:
+            print("[Ошибка] Нейросеть вернула пустой или некорректный JSON для FAQ.")
+            return []
+        quiz = _normalize_quiz(quiz)
+        for item in quiz:
+            item["source_chunk_id"] = None
+        return quiz
+    except Exception as e:
+        print(f"[Ошибка] Нейросеть не смогла создать FAQ-квиз: {e}")
         return []
-
-    for q in quiz:
-        if "source_chunk_id" not in q:
-            q["source_chunk_id"] = None
-
-    return quiz
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="Путь к текстовому файлу")
-    parser.add_argument("--output", default="quiz.json", help="Файл для сохранения")
-    args = parser.parse_args()
-    os.makedirs(args.output, exist_ok=True)
-    chunks_path = os.path.join(args.output, "chunks.jsonl")
-    quiz_path = os.path.join(args.output, "quiz.json")
-    print("Загрузка документа")
-    result = process_document(args.input)
-
-    save_chunks(result["chunks"], chunks_path)
-
-    with open(quiz_path, "w", encoding="utf-8") as f:
-        json.dump(result["quiz"], f, ensure_ascii=False, indent=2)
-
-    print(f"Готово! Результат сохранён в {args.output}")
 
 def process_document(file_path: str, num_questions: int = 5) -> dict:
     text = load_document(file_path)
+    if not text:
+        return {"chunks": [], "quiz": []}
+
     chunks = chunk_text(text)
-
     combined_text = ""
-    for c in chunks[:5]:
-        combined_text += f"[CHUNK_ID={c['id']}]\n{c['text']}\n\n"
+    for c in chunks:
+        combined_text += f"[ID:{c['id']}]\n{c['text']}\n\n"
 
+    print("-> Документ прочитан. Генерирую вопросы...")
     quiz = generate_quiz(combined_text, num_questions)
 
-    return {
-        "chunks": chunks,
-        "quiz": quiz
-    }
+    return {"chunks": chunks, "quiz": quiz}
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True, help="Путь к файлу")
+    parser.add_argument("--output_dir", default="quiz_result", help="Папка вывода")
+    parser.add_argument("--num_questions", type=int, default=5, help="Количество вопросов")
+    args = parser.parse_args()
+
+    print("\n" + "=" * 40)
+    print(f"[*] ЗАГРУЗКА ДОКУМЕНТА: {os.path.basename(args.input)}")
+    print("=" * 40)
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    result = process_document(args.input, num_questions=args.num_questions)
+
+    if result["chunks"]:
+        chunks_file = os.path.join(args.output_dir, "chunks.jsonl")
+        save_chunks(result["chunks"], chunks_file)
+        print(f"[+] Чанки сохранены в: {chunks_file}")
+
+    if result["quiz"]:
+        output_file = os.path.join(args.output_dir, "quiz.json")
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(result["quiz"], f, ensure_ascii=False, indent=2)
+        print(f"[+] ГОТОВО! Квиз сохранен в: {output_file}")
+    else:
+        print("[!] ОБРАБОТКА ПРЕРВАНА: Квиз не был создан (проверьте ошибки выше).")
+
+    print("=" * 40 + "\n")
 
 if __name__ == "__main__":
     main()
