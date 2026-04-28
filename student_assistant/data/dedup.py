@@ -1,12 +1,25 @@
 import re
 
+def is_lecture_entry(entry: dict) -> bool:
+    source = entry.get("source", "")
+    return isinstance(source, str) and source.startswith("lecture_")
+
+
+def get_exact_key(entry: dict):
+    question = entry.get("question", "").strip().lower()
+    source = entry.get("source", "")
+
+    if is_lecture_entry(entry):
+        return question, source
+
+    return question
+
 def deduplicate(entries, threshold=85):
     """
     Двухэтапная дедупликация:
     1. Точное совпадение по тексту (O(n))
     2. Нечеткое совпадение по ключевым словам или тексту вопроса (O(k^2))
     """
-    
     if not entries:
         return [], 0
 
@@ -15,18 +28,14 @@ def deduplicate(entries, threshold=85):
     initial_count = len(entries)
     
     for entry in entries:
+        q_norm = get_exact_key(entry)
         
-        q_norm = entry.get('question', '').strip().lower()
-        if entry.get('category') == 'лекции':
-            key = f"lect_{entry.get('id')}_{entry.get('source')}"
-        else:
-            key = q_norm
-        if key not in exact_map:
-            exact_map[key] = entry
+        if q_norm not in exact_map:
+            exact_map[q_norm] = entry
         else:
             # Оставляем запись с более полным ответом
-            if len(str(entry.get('answer', ''))) > len(str(exact_map[key].get('answer', ''))):
-                exact_map[key] = entry
+            if len(str(entry.get('answer', ''))) > len(str(exact_map[q_norm].get('answer', ''))):
+                exact_map[q_norm] = entry
 
     pre_filtered = list(exact_map.values())
     exact_removed = initial_count - len(pre_filtered)
@@ -36,9 +45,6 @@ def deduplicate(entries, threshold=85):
     fuzzy_removed = 0
 
     for entry in pre_filtered:
-        if entry.get('category') == 'лекции':
-            unique.append(entry)
-            continue
         is_duplicate = False
         # Пытаемся взять keywords, если их нет — генерируем из вопроса
         kw1 = set(entry.get('keywords', []))
@@ -47,7 +53,7 @@ def deduplicate(entries, threshold=85):
 
 
         for i, existing in enumerate(unique):
-            if existing.get('category') == 'лекции':
+            if is_lecture_entry(entry) and is_lecture_entry(existing):
                 continue
             kw2 = set(existing.get('keywords', []))
             if not kw2:
@@ -55,16 +61,15 @@ def deduplicate(entries, threshold=85):
 
             if not kw1 or not kw2:
                 continue
-            
+
             # Считаем сходство (Жаккар)
             common = kw1 & kw2
             max_len = max(len(kw1), len(kw2))
             similarity = (len(common) / max_len) * 100
             
-            q1 = entry.get('question', '')
-            q2 = existing.get('question', '')
-
             if similarity >= threshold:
+                q1 = entry.get('question', '')
+                q2 = existing.get('question', '')
                 len_ratio = min(len(q1), len(q2)) / max(len(q1), len(q2))
             
                 if len_ratio < 0.6: 
