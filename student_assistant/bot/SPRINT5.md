@@ -6,25 +6,9 @@
 
 ## Артём — `voice_server.py`
 
-### 1) Валидация входа в `/ask`
+### 1) Валидация входа — УЖЕ СДЕЛАНО
 
-Сейчас если кто-то дёрнет endpoint неправильно, будет страшный traceback. Нужно вернуть понятную ошибку:
-
-```python
-from fastapi import HTTPException, UploadFile, File
-
-@app.post("/ask")
-async def ask(file: UploadFile = File(...)):
-    if not file.content_type or not file.content_type.startswith("audio/"):
-        raise HTTPException(status_code=415, detail="Ожидается аудио (wav/webm)")
-    # ... твой остальной код
-```
-
-**Как проверить:**
-```bash
-curl -X POST http://localhost:8000/ask -F "file=@README.md;type=text/plain"
-# Должен вернуть {"detail": "Ожидается аудио (wav/webm)"} с кодом 415
-```
+У тебя в `/ask` уже есть проверка `allowed_content_types` (audio/wav, audio/webm и т.д.) с возвратом 400. Это хорошо — оставь как есть, ничего менять не нужно.
 
 ### 2) НЕ ТРОГАЙ блок `@app.on_event("startup")`
 
@@ -46,13 +30,38 @@ curl -X POST http://localhost:8000/ask -F "file=@README.md;type=text/plain"
 
 Если Андрей не успеет — пропусти этот пункт, не блокируй сдачу.
 
-### 4) Создай PR в main
+### 4) Дальнейшие правки — только через PR
 
-Сейчас твой `voice_server.py` лежит в `main` напрямую (ты залил с ветки Vondre) — это нарушение workflow. Создай нормальный PR из ветки `team-artem-lev` в `main` с описанием что ты сделал.
+Сейчас твой `voice_server.py` уже в `main` (через прямой пуш с ветки Vondre — так больше не делаем). Если будешь что-то править ещё — работай в ветке `team-artem-lev` и через Pull Request, не пуши в main напрямую.
 
-## Лев — тесты и документация
+## Лев — слить ветку в main + тесты + README
 
-### 1) Допиши два теста на ошибки
+### 1) ⚠️ Главное — слить `team-artem-lev` в main
+
+Сейчас в твоей ветке `team-artem-lev` лежит **куча твоей работы**: `test_voice.py`, `test_audios/`, `requirements.txt`, `.gitignore`, `Readme.Md`, `handlers/`, `keyboards/`, `suggestions.py`, `faq.json`. **В main ничего этого нет** — Артём пушил свой `voice_server.py` напрямую, твоя работа осталась в ветке.
+
+Что делать:
+```bash
+git checkout team-artem-lev
+git fetch origin
+git rebase origin/main
+# Будет конфликт в voice_server.py — выбери версию из main (она актуальнее, чем у тебя в ветке)
+git rebase --continue
+git push --force-with-lease origin team-artem-lev
+```
+
+Потом создай Pull Request из `team-artem-lev` в `main` через GitHub. Ревьюит кто-то из группы, потом мердж.
+
+После мерджа в main попадут все твои файлы.
+
+### 2) Переименуй `Readme.Md` → `README.md`
+
+У тебя файл назван `Readme.Md` (странный регистр) — это стандарт GitHub `README.md`, переименуй:
+```bash
+git mv student_assistant/bot/Readme.Md student_assistant/bot/README.md
+```
+
+### 3) Допиши два теста на ошибки
 
 Открой `test_voice.py`, добавь:
 
@@ -63,19 +72,19 @@ def test_ask_no_file(client):
     assert response.status_code in (400, 422)
 
 def test_ask_wrong_type(client):
-    """Текстовый файл вместо аудио должен вернуть 415"""
+    """Текстовый файл вместо аудио должен вернуть 400 (allowed_content_types не содержит text/plain)"""
     response = client.post(
         "/ask",
         files={"file": ("a.txt", b"hello", "text/plain")}
     )
-    assert response.status_code == 415
+    assert response.status_code == 400
 ```
 
 **Как проверить:** `pytest test_voice.py -v` — все тесты должны быть зелёные.
 
-### 2) Финализируй README.md
+### 4) Финализируй README.md
 
-Структура:
+У тебя уже есть `Readme.Md` в ветке — обнови его (после переименования) до такой структуры:
 
 ```markdown
 # Голосовой сервер ассистента
@@ -110,7 +119,7 @@ curl http://localhost:8000/health
 pytest test_voice.py
 ```
 
-### 3) `.env.example`
+### 5) `.env.example`
 
 Положи рядом с `voice_server.py`:
 ```
