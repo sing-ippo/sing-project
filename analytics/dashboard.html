@@ -878,8 +878,8 @@
     }
 
     function parseJsonl(content) {
-        return content.trim().split('\n').map(line => {
-            try { return JSON.parse(line); } catch { return null; }
+        return content.trim().split(/\r?\n/).map(line => {
+            try { return JSON.parse(line.trim()); } catch { return null; }
         }).filter(Boolean);
     }
 
