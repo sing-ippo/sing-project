@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from fastapi import Body, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import JSONResponse
 
-from formulas_module import Pix2TextNotInstalledError, extract_formulas, is_pix2text_available
+from formulas_api.formulas_module import Pix2TextNotInstalledError, extract_formulas, is_pix2text_available
 
 app = FastAPI(title="Formula Extractor API", version="1.1.0")
 
