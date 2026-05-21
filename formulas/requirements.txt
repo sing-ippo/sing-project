@@ -5,3 +5,6 @@ python-multipart
 pix2text
 pillow
 pytest
+matplotlib
+pytest
+httpx

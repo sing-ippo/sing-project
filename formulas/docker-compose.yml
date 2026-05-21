@@ -1,0 +1,5 @@
+services:
+  formulas:
+    build: .
+    ports:
+      - "8001:8000"
