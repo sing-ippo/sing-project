@@ -84,9 +84,20 @@ def tensor_to_wav_bytes(audio_tensor: torch.Tensor, sample_rate: int = TTS_SAMPL
     return buffer.getvalue()
 
 
+_DOMAIN_RE = re.compile(r"[a-zA-Z0-9]+(?:[.\-][a-zA-Z0-9]+)+")
+
+
+def make_speakable(text: str) -> str:
+    """Готовит текст к озвучке: в доменах/ссылках «.» → « точка », «-» → « дефис ».
+    Применяется ТОЛЬКО к синтезу речи; на экран идёт исходный текст с чистым URL."""
+    def repl(match: re.Match) -> str:
+        return match.group(0).replace(".", " точка ").replace("-", " дефис ")
+    return _DOMAIN_RE.sub(repl, text)
+
+
 def synthesize_answer(answer: str) -> bytes:
     audio_tensor = tts_model.apply_tts(
-        text=answer,
+        text=make_speakable(answer),
         speaker=TTS_VOICE,
         sample_rate=TTS_SAMPLE_RATE,
     )
