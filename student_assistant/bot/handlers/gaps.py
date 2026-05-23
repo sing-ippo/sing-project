@@ -6,8 +6,8 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
-from ..keyboards.inline_keyboards import get_back_to_start_keyboard
-from ..suggestions import get_all_suggestions
+from keyboards.inline_keyboards import get_back_to_start_keyboard
+from suggestions import get_all_suggestions
 
 gaps_router = Router()
 

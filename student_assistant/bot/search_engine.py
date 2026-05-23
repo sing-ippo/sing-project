@@ -14,6 +14,9 @@ DEFAULT_FALLBACK_ANSWER = (
     "Попробуйте переформулировать вопрос."
 )
 
+# Алиас для Telegram-бота (handlers/faq.py)
+NO_ANSWER_TEXT = DEFAULT_FALLBACK_ANSWER
+
 
 # =========================
 # РАБОТА С FAQ

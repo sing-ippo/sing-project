@@ -1,29 +1,46 @@
 services:
   voice_server:
     build: ./student_assistant/bot
+    command: uvicorn voice_server:app --host 0.0.0.0 --port 8000
     ports:
       - "8010:8000"
     environment:
       - WHISPER_MODEL=${WHISPER_MODEL:-medium}
+      - FAQ_PATH=/app/faq.json
       - REQUESTS_LOG=/data/requests.jsonl
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
     volumes:
       # Кэш моделей Whisper и Silero — чтобы не качать при каждом рестарте
       - model-cache:/root/.cache
       # Логи запросов наружу — их грузит дашборд аналитики
       - ./logs:/data
-      # FAQ как volume — правки базы без пересборки образа (нужен лишь restart)
-      - ./student_assistant/bot/faq.json:/app/faq.json:ro
+      # Единый FAQ (выход пайплайна) — правки без пересборки образа
+      - ./student_assistant/data/faq.json:/app/faq.json:ro
+
+  # Telegram-бот студента. Нужен BOT_TOKEN в .env — иначе сервис не стартует.
+  # Запуск: docker compose up -d student_bot
+  student_bot:
+    build: ./student_assistant/bot
+    command: python bot.py
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN:-}
+      - PROXY_URL=${PROXY_URL:-}
+      - FAQ_PATH=/app/faq.json
+      - REQUESTS_LOG=/data/requests.jsonl
+      - SUGGESTIONS_LOG=/data/suggestions.jsonl
+    volumes:
+      - ./logs:/data
+      - ./student_assistant/data/faq.json:/app/faq.json:ro
 
   web:
     image: nginx:alpine
     ports:
       - "3001:80"
     volumes:
-      # Киоск: http://localhost:3000/kiosk/kiosk.html
+      # Киоск: http://localhost:3001/kiosk/kiosk.html
       - ./teacher_pipeline/pipeline:/usr/share/nginx/html/kiosk:ro
-      # Дашборд: http://localhost:3000/dashboard/dashboard.html
+      # Дашборд: http://localhost:3001/dashboard/dashboard.html
       - ./analytics:/usr/share/nginx/html/dashboard:ro
 
 volumes:

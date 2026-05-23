@@ -4,12 +4,16 @@ const BACKEND_URL = "http://localhost:8010";
 const recordBtn = document.getElementById("record-btn");
 const questionEl = document.getElementById("question");
 const answerEl = document.getElementById("answer");
+const feedbackEl = document.getElementById("feedback");
+const fbYesBtn = document.getElementById("fb-yes");
+const fbNoBtn = document.getElementById("fb-no");
 
 let mediaStream = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 let isBusy = false;
+let lastRequestId = null;
 
 // Микрофон запрашиваем один раз и переиспользуем поток.
 async function ensureStream() {
@@ -35,6 +39,7 @@ async function startRecording() {
         recordBtn.classList.add("recording");
         answerEl.textContent = "";
         questionEl.textContent = "Слушаю…";
+        feedbackEl.hidden = true;
     } catch (err) {
         answerEl.textContent = "Нет доступа к микрофону. Разрешите доступ и попробуйте снова.";
         console.error(err);
@@ -85,6 +90,11 @@ function showResult(data) {
     questionEl.textContent = data.question || "";
     answerEl.textContent = data.answer || "";
 
+    lastRequestId = data.request_id || null;
+    if (lastRequestId) {
+        feedbackEl.hidden = false;
+    }
+
     if (data.audio_base64) {
         try {
             const audioBlob = base64ToBlob(data.audio_base64, "audio/wav");
@@ -106,6 +116,25 @@ function base64ToBlob(base64, mimeType) {
     }
     return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
 }
+
+async function sendFeedback(helpful) {
+    if (!lastRequestId) return;
+    feedbackEl.hidden = true;
+    answerEl.textContent += helpful ? "\n\nСпасибо за отзыв! 🙂" : "\n\nСпасибо, учтём!";
+    try {
+        await fetch(`${BACKEND_URL}/feedback`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ request_id: lastRequestId, helpful }),
+        });
+    } catch (err) {
+        console.error("Не удалось отправить отзыв:", err);
+    }
+    lastRequestId = null;
+}
+
+fbYesBtn.addEventListener("click", () => sendFeedback(true));
+fbNoBtn.addEventListener("click", () => sendFeedback(false));
 
 // Удержание кнопки = запись. Мышь и тач.
 recordBtn.addEventListener("mousedown", startRecording);

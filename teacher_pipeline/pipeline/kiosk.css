@@ -72,4 +72,26 @@ main {
 }
 
 #question { color: #555; }
-#answer { color: #222; font-weight: bold; }
+#answer { color: #222; font-weight: bold; white-space: pre-line; }
+
+#feedback {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.feedback-label {
+    font-size: 22px;
+    color: #555;
+}
+
+.fb-btn {
+    font-size: 22px;
+    padding: 12px 28px;
+    border: none;
+    border-radius: 12px;
+    background: #e3f2fd;
+    cursor: pointer;
+}
+
+.fb-btn:hover { background: #bbdefb; }

@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -12,7 +13,7 @@ import numpy as np
 import scipy.io.wavfile as wavfile
 import torch
 import whisper
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from search_engine import (
@@ -36,7 +37,8 @@ def lemmatize(text: str) -> str:
 
 
 BASE_DIR = Path(__file__).resolve().parent
-FAQ_PATH = BASE_DIR / "faq.json"
+# Единый источник FAQ — выход пайплайна data/faq.json (можно переопределить env FAQ_PATH)
+FAQ_PATH = Path(os.getenv("FAQ_PATH", str(BASE_DIR.parent / "data" / "faq.json")))
 REQUESTS_LOG = Path(os.getenv("REQUESTS_LOG", str(BASE_DIR / "requests.jsonl")))
 
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "small")
@@ -127,11 +129,12 @@ def has_exact_word_match(question: str, entry: dict) -> bool:
     return bool(question_words & entry_words)
 
 
-def log_request(query: str, answer: str, matched: bool, source: str = "none") -> None:
+def log_request(request_id: str, query: str, answer: str, matched: bool, source: str = "none") -> None:
     """Пишет запрос в requests.jsonl в формате, который понимает дашборд аналитики.
     source — кто ответил: deepseek / faq-offline / none.
-    helpful всегда null — у голосового киоска нет UI обратной связи."""
+    helpful=None пока пользователь не нажал «Помогло?» (обновляется в /feedback)."""
     record = {
+        "request_id": request_id,
         "timestamp": datetime.now().isoformat(),
         "query": query,
         "answer": answer,
@@ -144,6 +147,32 @@ def log_request(query: str, answer: str, matched: bool, source: str = "none") ->
             file.write(json.dumps(record, ensure_ascii=False) + "\n")
     except OSError:
         pass
+
+
+def set_feedback(request_id: str, helpful: bool) -> bool:
+    """Проставляет helpful у записи requests.jsonl по request_id. Перезапись файла
+    (для киоска объём мал). True — если запись найдена и обновлена."""
+    if not REQUESTS_LOG.exists():
+        return False
+    found = False
+    lines: list[str] = []
+    try:
+        with REQUESTS_LOG.open("r", encoding="utf-8") as file:
+            for line in file:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if rec.get("request_id") == request_id:
+                    rec["helpful"] = helpful
+                    found = True
+                lines.append(json.dumps(rec, ensure_ascii=False))
+        if found:
+            with REQUESTS_LOG.open("w", encoding="utf-8") as file:
+                file.write("\n".join(lines) + "\n")
+    except (OSError, json.JSONDecodeError):
+        return False
+    return found
 
 
 @app.on_event("startup")
@@ -242,12 +271,14 @@ async def ask(file: UploadFile = File(...)) -> dict:
             if not answer:
                 answer = DEFAULT_FALLBACK_ANSWER
 
-        log_request(question, answer, matched=(source != "none"), source=source)
+        request_id = uuid.uuid4().hex
+        log_request(request_id, question, answer, matched=(source != "none"), source=source)
 
         audio_bytes = synthesize_answer(answer)
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
         return {
+            "request_id": request_id,
             "question": question,
             "answer": answer,
             "audio_base64": audio_base64,
@@ -270,3 +301,10 @@ async def ask(file: UploadFile = File(...)) -> dict:
                     Path(path).unlink()
                 except OSError:
                     pass
+
+
+@app.post("/feedback")
+async def feedback(request_id: str = Body(..., embed=True), helpful: bool = Body(..., embed=True)) -> dict:
+    """Отмечает, помог ли ответ. Обновляет helpful у записи requests.jsonl."""
+    updated = set_feedback(request_id, helpful)
+    return {"ok": updated}

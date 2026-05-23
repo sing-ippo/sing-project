@@ -3,7 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
-from ..keyboards.inline_keyboards import start_inline_keyboard
+from keyboards.inline_keyboards import start_inline_keyboard
 
 start_router = Router()
 

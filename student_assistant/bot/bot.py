@@ -5,9 +5,9 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 
-from .handlers.start import start_router
-from .handlers.faq import faq_router
-from .handlers.gaps import gaps_router
+from handlers.start import start_router
+from handlers.faq import faq_router
+from handlers.gaps import gaps_router
 
 from dotenv import load_dotenv
 load_dotenv()
