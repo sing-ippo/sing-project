@@ -14,7 +14,12 @@ import whisper
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from search_engine import get_best_answer, load_faq_from_file
+from search_engine import (
+    DEFAULT_FALLBACK_ANSWER,
+    load_faq_from_file,
+    search,
+    split_words,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -78,6 +83,17 @@ def synthesize_answer(answer: str) -> bytes:
 def transcribe_audio(wav_path: str) -> str:
     result = whisper_model.transcribe(wav_path, language="ru")
     return result.get("text", "").strip()
+
+
+def has_exact_word_match(question: str, entry: dict) -> bool:
+    """True, если хотя бы одно слово вопроса целиком совпадает со словом
+    из keywords или текста вопроса FAQ-записи. Отсекает ложные срабатывания
+    поиска на бессмысленных запросах (которые матчатся лишь по префиксам)."""
+    question_words = split_words(question)
+    entry_words: set[str] = split_words(entry.get("question", ""))
+    for keyword in entry.get("keywords", []):
+        entry_words |= split_words(keyword)
+    return bool(question_words & entry_words)
 
 
 def log_request(query: str, answer: str, matched: bool) -> None:
@@ -164,10 +180,20 @@ async def ask(file: UploadFile = File(...)) -> dict:
         if not question:
             raise HTTPException(status_code=400, detail="Не удалось распознать вопрос")
 
-        faq_result = await get_best_answer(question, faq_data)
-        answer = faq_result["answer"]
+        # Гейт уверенности: отвечаем, только если у лучшего результата есть
+        # хотя бы одно слово, целиком совпадающее со словом вопроса. Иначе
+        # говорим «не нашёл» — чтобы киоск не отвечал уверенной чушью.
+        answer = DEFAULT_FALLBACK_ANSWER
+        matched = False
+        results = await search(question, faq_data, top_n=3)
+        if results:
+            best = results[0]
+            entry = next((e for e in faq_data if e.get("id") == best["id"]), None)
+            if entry and has_exact_word_match(question, entry):
+                answer = best["answer"]
+                matched = True
 
-        log_request(question, answer, faq_result["found"])
+        log_request(question, answer, matched)
 
         audio_bytes = synthesize_answer(answer)
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
