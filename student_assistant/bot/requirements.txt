@@ -18,3 +18,4 @@ pytest
 httpx
 omegaconf
 beautifulsoup4
+pymorphy3

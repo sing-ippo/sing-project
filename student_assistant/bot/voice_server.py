@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import os
+import re
 import subprocess
 import tempfile
 from datetime import datetime
@@ -21,6 +22,17 @@ from search_engine import (
     split_words,
 )
 from web_fallback import DEEPSEEK_API_KEY, ask_deepseek, search_mirea
+
+from pymorphy3 import MorphAnalyzer
+
+_morph = MorphAnalyzer()
+_word_re = re.compile(r"[а-яёa-z0-9]+", re.IGNORECASE)
+
+
+def lemmatize(text: str) -> str:
+    """Приводит слова к нормальной форме — ключевые слова FAQ тоже лемматизированы,
+    поэтому «общежитии» начинает совпадать с «общежитие»."""
+    return " ".join(_morph.parse(w)[0].normal_form for w in _word_re.findall(text.lower()))
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -199,7 +211,8 @@ async def ask(file: UploadFile = File(...)) -> dict:
         # RAG-комбо: собираем контекст (релевантные FAQ + сниппеты mirea.ru)
         # и просим DeepSeek сформулировать ответ. При недоступности LLM —
         # деградация на чистый FAQ с гейтом точного совпадения.
-        faq_candidates = await search(question, faq_data, top_n=3)
+        lemmatized = lemmatize(question)
+        faq_candidates = await search(lemmatized, faq_data, top_n=5)
         snippets = await search_mirea(question)
 
         answer = None
@@ -212,7 +225,7 @@ async def ask(file: UploadFile = File(...)) -> dict:
         if not answer:
             if faq_candidates:
                 entry = next((e for e in faq_data if e.get("id") == faq_candidates[0]["id"]), None)
-                if entry and has_exact_word_match(question, entry):
+                if entry and has_exact_word_match(lemmatized, entry):
                     answer = faq_candidates[0]["answer"]
                     source = "faq-offline"
             if not answer:
