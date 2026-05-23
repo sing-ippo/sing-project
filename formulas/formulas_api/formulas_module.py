@@ -13,6 +13,8 @@ import httpx
 from PIL import Image
 
 GOTENBERG_URL = os.getenv("GOTENBERG_URL", "http://gotenberg:3000")
+# Сколько страниц PDF максимум OCR-ить (pix2text тяжёлый на CPU) — защита от перегрева
+MAX_PAGES = int(os.getenv("MAX_PAGES", "12"))
 
 
 class FormulaExtractionError(Exception):
@@ -143,7 +145,7 @@ def _clean_latex(text: str) -> str:
 def extract_formulas(
     pdf_path: str,
     pages: Optional[List[int]] = None,
-    zoom: float = 2.0,
+    zoom: float = 1.5,
     resized_shape: int = 768,
     device: Optional[str] = None,
     mfr_batch_size: int = 1,
@@ -163,9 +165,9 @@ def extract_formulas(
     doc = fitz.open(pdf_path)
     try:
         if pages is None:
-            pages_to_process = list(range(1, len(doc) + 1))
+            pages_to_process = list(range(1, min(len(doc), MAX_PAGES) + 1))
         else:
-            pages_to_process = [p for p in pages if 1 <= p <= len(doc)]
+            pages_to_process = [p for p in pages if 1 <= p <= len(doc)][:MAX_PAGES]
 
         if not pages_to_process:
             return []
@@ -353,15 +355,16 @@ PANDOC_EXTS = {"docx", "odt", "rtf", "html", "htm", "epub", "md", "markdown", "t
 OFFICE_OCR_EXTS = {"docx", "doc", "ppt", "pptx", "odt", "ods", "odp", "rtf", "xls", "xlsx"}
 
 
-def extract_any(path: str, filename: str) -> List[Dict[str, Any]]:
-    """Максимальный охват: объединяет все применимые источники, дедупит."""
+def extract_any(path: str, filename: str, page_range: Optional[List[int]] = None) -> List[Dict[str, Any]]:
+    """Максимальный охват: объединяет все применимые источники, дедупит.
+    page_range — для PDF ограничить страницы (None = первые MAX_PAGES)."""
     name = (filename or path).lower()
     ext = name.rsplit(".", 1)[-1] if "." in name else ""
 
     if ext in IMAGE_EXTS:
         return extract_image(path)
     if ext == "pdf":
-        return extract_formulas(path)
+        return extract_formulas(path, pages=page_range)
 
     results: List[Dict[str, Any]] = []
     errors: List[str] = []

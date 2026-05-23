@@ -74,6 +74,11 @@ services:
       - GOTENBERG_URL=http://gotenberg:3000
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      - MAX_PAGES=${MAX_PAGES:-12}
+      - OMP_NUM_THREADS=2
+    # Чтобы pix2text не клал ноут: ограничиваем ядра и память
+    cpus: "3.0"
+    mem_limit: 4g
     depends_on:
       - gotenberg
     volumes:

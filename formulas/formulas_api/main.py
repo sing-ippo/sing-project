@@ -9,9 +9,28 @@ import matplotlib
 
 matplotlib.use("Agg")  # without GUI
 import matplotlib.pyplot as plt
-from fastapi import Body, FastAPI, File, HTTPException, Query, Response, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+
+def _parse_pages(spec: str):
+    """«1-10», «1,3,5» → [1,2,…]; пусто → None."""
+    spec = (spec or "").strip()
+    if not spec:
+        return None
+    out: set = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if "-" in part:
+            try:
+                a, b = part.split("-", 1)
+                out.update(range(int(a), int(b) + 1))
+            except ValueError:
+                continue
+        elif part.isdigit():
+            out.add(int(part))
+    return sorted(p for p in out if p >= 1) or None
 
 from formulas_api.formulas_module import (
     FormulaExtractionError,
@@ -129,9 +148,10 @@ async def render_formula(latex: str = Body(..., embed=True)) -> Response:
 
 
 @app.post("/extract")
-async def extract(file: UploadFile = File(...)):
-    """Извлекает формулы из документа любого поддерживаемого типа:
-    PDF и картинки (png/jpg) — через pix2text; docx — через pandoc; txt/md/tex — регуляркой."""
+async def extract(file: UploadFile = File(...), pages: str = Form("")):
+    """Извлекает формулы из документа любого поддерживаемого типа.
+    pages (PDF) — напр. «1-10»; пусто = первые MAX_PAGES."""
+    page_range = _parse_pages(pages)
     data = await file.read()
     if len(data) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail=f"Файл слишком большой. Лимит {MAX_FILE_SIZE} байт.")
@@ -144,7 +164,7 @@ async def extract(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     try:
-        formulas = extract_any(tmp_path, file.filename or tmp_path)
+        formulas = extract_any(tmp_path, file.filename or tmp_path, page_range=page_range)
         return JSONResponse(content=formulas)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -159,8 +179,9 @@ async def extract(file: UploadFile = File(...)):
 
 
 @app.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(file: UploadFile = File(...), pages: str = Form("")):
     """Извлекает формулы и обогащает их названиями/пояснениями через DeepSeek."""
+    page_range = _parse_pages(pages)
     data = await file.read()
     if len(data) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail=f"Файл слишком большой. Лимит {MAX_FILE_SIZE} байт.")
@@ -173,7 +194,7 @@ async def analyze(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     try:
-        formulas = extract_any(tmp_path, file.filename or tmp_path)
+        formulas = extract_any(tmp_path, file.filename or tmp_path, page_range=page_range)
         formulas = name_formulas(formulas, source_title=file.filename or "")
         return JSONResponse(content={"formulas": formulas})
     except ValueError as exc:

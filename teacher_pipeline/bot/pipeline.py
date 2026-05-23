@@ -16,7 +16,7 @@ def load_txt(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
-def load_pdf(path: str) -> str:
+def load_pdf(path: str, page_range: List[int] = None) -> str:
     try:
         import PyPDF2
     except ImportError:
@@ -27,8 +27,13 @@ def load_pdf(path: str) -> str:
     try:
         with open(path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
-            for page in reader.pages:
-                text += (page.extract_text() or "") + "\n"
+            total = len(reader.pages)
+            if page_range:
+                indices = [p - 1 for p in page_range if 1 <= p <= total]
+            else:
+                indices = range(total)
+            for i in indices:
+                text += (reader.pages[i].extract_text() or "") + "\n"
     except Exception as e:
         print(f"[Ошибка] Чтение PDF: {e}")
     return text
@@ -47,15 +52,15 @@ def load_docx(path: str) -> str:
         print(f"[Ошибка] Чтение DOCX: {e}")
         return ""
 
-def load_document(path: str) -> str:
+def load_document(path: str, page_range: List[int] = None) -> str:
     if not os.path.exists(path):
         print(f"[!] Файл не найден: {path}")
         return ""
 
-    max_size = 50 * 1024
+    max_size = 25 * 1024 * 1024  # 25 МБ — учебники бывают большими; объём режется выбором страниц
     file_size = os.path.getsize(path)
     if file_size > max_size:
-        print(f"[!] Файл слишком большой ({file_size} байт). Лимит — 50 KB.")
+        print(f"[!] Файл слишком большой ({file_size} байт). Лимит — 25 МБ.")
         return ""
 
     lower_path = path.lower()
@@ -67,7 +72,7 @@ def load_document(path: str) -> str:
     if lower_path.endswith(".txt"):
         text = load_txt(path)
     elif lower_path.endswith(".pdf"):
-        text = load_pdf(path)
+        text = load_pdf(path, page_range=page_range)
     elif lower_path.endswith(".docx"):
         text = load_docx(path)
 
@@ -158,7 +163,15 @@ def _normalize_quiz(quiz: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     return normalized
 
-def generate_quiz(text: str, num_questions: int = 5) -> List[Dict[str, Any]]:
+MAX_QUIZ_WORDS = 8000  # кап текста для LLM (защита от гигантских промптов на учебниках)
+
+
+def generate_quiz(text: str, num_questions: int = 5, topic: str = None) -> List[Dict[str, Any]]:
+    words = text.split()
+    if len(words) > MAX_QUIZ_WORDS:
+        text = " ".join(words[:MAX_QUIZ_WORDS])
+
+    topic_line = f"- Сосредоточься на теме: «{topic}». Вопросы должны быть строго по ней.\n" if topic else ""
     prompt = f"""
 Создай {num_questions} тестовых вопросов по тексту.
 
@@ -171,7 +184,7 @@ def generate_quiz(text: str, num_questions: int = 5) -> List[Dict[str, Any]]:
 - correct — индекс правильного ответа: 0, 1, 2 или 3.
 - source_chunk_id — это id чанка из текста вида [ID:<номер>]. Если определить нельзя, поставь null.
 - Математические формулы оформляй в LaTeX между знаками доллара: $...$ (например $x^2 + 1$). Вне формул LaTeX не используй.
-- Не добавляй markdown, комментарии или пояснения вне JSON.
+{topic_line}- Не добавляй markdown, комментарии или пояснения вне JSON.
 
 Текст:
 {text}
@@ -235,8 +248,8 @@ FAQ-записи:
         item["source_chunk_id"] = None
     return quiz
 
-def process_document(file_path: str, num_questions: int = 5) -> dict:
-    text = load_document(file_path)
+def process_document(file_path: str, num_questions: int = 5, page_range: List[int] = None, topic: str = None) -> dict:
+    text = load_document(file_path, page_range=page_range)
     if not text:
         return {"chunks": [], "quiz": []}
 
@@ -246,9 +259,9 @@ def process_document(file_path: str, num_questions: int = 5) -> dict:
         combined_text += f"[ID:{c['id']}]\n{c['text']}\n\n"
 
     print("-> Документ прочитан. Генерирую вопросы...")
-    quiz = generate_quiz(combined_text, num_questions)
+    quiz = generate_quiz(combined_text, num_questions, topic=topic)
 
-    return {"chunks": chunks, "quiz": quiz}
+    return {"chunks": chunks, "quiz": quiz, "words": len(text.split())}
 
 def main():
     parser = argparse.ArgumentParser()

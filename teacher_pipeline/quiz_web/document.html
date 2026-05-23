@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Квиз по документу — РТУ МИРЭА</title>
+    <link rel="stylesheet" href="vendor/katex/katex.min.css">
+    <link rel="stylesheet" href="quiz.css">
+    <script defer src="vendor/katex/katex.min.js"></script>
+    <script defer src="vendor/katex/contrib/auto-render.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>📚 Квиз по документу</h1>
+        <p class="sub">Загрузите учебник/PDF, укажите страницы и/или тему — соберём тест</p>
+    </header>
+
+    <main>
+        <section id="input-block">
+            <div class="controls">
+                <label class="file-label">
+                    📎 Документ (.pdf/.docx/.txt)
+                    <input type="file" id="file-input" accept=".pdf,.docx,.txt" hidden>
+                </label>
+                <span id="file-name"></span>
+            </div>
+            <div class="controls">
+                <label>Страницы (PDF): <input type="text" id="pages-input" placeholder="напр. 1-10" size="10"></label>
+                <label>Тема: <input type="text" id="topic-input" placeholder="напр. интегралы" size="18"></label>
+                <label>Вопросов: <input type="number" id="num-input" value="5" min="1" max="10"></label>
+                <button id="gen-btn">Сгенерировать квиз</button>
+            </div>
+
+            <div id="progress" hidden>
+                <div class="bar"><div class="bar-fill"></div></div>
+                <div id="status"></div>
+            </div>
+            <details id="debug-box" open>
+                <summary>Дебаг</summary>
+                <pre id="debug-log"></pre>
+            </details>
+        </section>
+
+        <section id="quiz-block" hidden>
+            <div id="question-area"></div>
+            <div id="result-area" hidden></div>
+            <button id="restart-btn" hidden>Новый квиз</button>
+        </section>
+    </main>
+
+    <script src="document.js"></script>
+</body>
+</html>
