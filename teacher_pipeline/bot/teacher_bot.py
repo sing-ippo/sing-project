@@ -20,7 +20,8 @@ from telegram.request import HTTPXRequest
 from pipeline import process_document, generate_quiz_from_faq
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-FAQ_PATH = Path(__file__).resolve().parent.parent.parent / "student_assistant" / "data" / "lecture_faq.json"
+_default_faq = Path(__file__).resolve().parent.parent.parent / "student_assistant" / "data" / "lecture_faq.json"
+FAQ_PATH = Path(os.getenv("FAQ_PATH", str(_default_faq)))
 
 logging.basicConfig(level=logging.INFO)
 

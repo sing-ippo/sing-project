@@ -2,11 +2,15 @@ import argparse
 import json
 import os
 from typing import Any, Dict, List
+
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash")
+DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
 def load_txt(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
@@ -93,19 +97,30 @@ def save_chunks(chunks: List[Dict[str, Any]], output_path: str) -> None:
         for chunk in chunks:
             f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
-def _get_gemini_client():
+def _call_deepseek(prompt: str) -> str:
+    """Вызывает DeepSeek (OpenAI-совместимый) и возвращает текст ответа.
+    Пустая строка — если нет ключа или ошибка."""
+    if not DEEPSEEK_API_KEY:
+        print("[Ошибка] Переменная DEEPSEEK_API_KEY не задана.")
+        return ""
+
+    payload = {
+        "model": DEEPSEEK_MODEL,
+        "messages": [
+            {"role": "system", "content": "Ты генератор тестовых вопросов. Возвращай только JSON-массив, без markdown и пояснений."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.4,
+        "stream": False,
+    }
+    headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
     try:
-        from google import genai
-    except ImportError:
-        print("[Ошибка] Не установлена библиотека: pip install google-generativeai")
-        return None
-
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("[Ошибка] Переменная GEMINI_API_KEY не задана.")
-        return None
-
-    return genai.Client(api_key=api_key)
+        response = httpx.post(DEEPSEEK_URL, json=payload, headers=headers, timeout=60.0)
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"[Ошибка] DeepSeek: {e}")
+        return ""
 
 def _extract_json_array(raw_text: str) -> List[Dict[str, Any]]:
     if not raw_text:
@@ -144,10 +159,6 @@ def _normalize_quiz(quiz: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return normalized
 
 def generate_quiz(text: str, num_questions: int = 5) -> List[Dict[str, Any]]:
-    client = _get_gemini_client()
-    if client is None:
-        return []
-
     prompt = f"""
 Создай {num_questions} тестовых вопросов по тексту.
 
@@ -165,16 +176,12 @@ def generate_quiz(text: str, num_questions: int = 5) -> List[Dict[str, Any]]:
 {text}
 """
 
-    try:
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        quiz = _extract_json_array(getattr(response, "text", ""))
-        if not quiz:
-            print("[Ошибка] Нейросеть вернула пустой или некорректный JSON.")
-            return []
-        return _normalize_quiz(quiz)
-    except Exception as e:
-        print(f"[Ошибка] Нейросеть не смогла создать квиз: {e}")
+    raw = _call_deepseek(prompt)
+    quiz = _extract_json_array(raw)
+    if not quiz:
+        print("[Ошибка] Нейросеть вернула пустой или некорректный JSON.")
         return []
+    return _normalize_quiz(quiz)
 
 def generate_quiz_from_faq(entries: list, num_questions: int = 5) -> List[Dict[str, Any]]:
     """
@@ -198,9 +205,6 @@ def generate_quiz_from_faq(entries: list, num_questions: int = 5) -> List[Dict[s
             prepared_entries.append(f"Запись {idx}: {str(entry)}")
 
     faq_context = "\n\n".join(prepared_entries)
-    client = _get_gemini_client()
-    if client is None:
-        return []
 
     prompt = f"""
 На основе этих FAQ-вопросов и ответов составь {num_questions} тестовых вопросов для студентов.
@@ -219,19 +223,15 @@ FAQ-записи:
 {faq_context}
 """
 
-    try:
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        quiz = _extract_json_array(getattr(response, "text", ""))
-        if not quiz:
-            print("[Ошибка] Нейросеть вернула пустой или некорректный JSON для FAQ.")
-            return []
-        quiz = _normalize_quiz(quiz)
-        for item in quiz:
-            item["source_chunk_id"] = None
-        return quiz
-    except Exception as e:
-        print(f"[Ошибка] Нейросеть не смогла создать FAQ-квиз: {e}")
+    raw = _call_deepseek(prompt)
+    quiz = _extract_json_array(raw)
+    if not quiz:
+        print("[Ошибка] Нейросеть вернула пустой или некорректный JSON для FAQ.")
         return []
+    quiz = _normalize_quiz(quiz)
+    for item in quiz:
+        item["source_chunk_id"] = None
+    return quiz
 
 def process_document(file_path: str, num_questions: int = 5) -> dict:
     text = load_document(file_path)

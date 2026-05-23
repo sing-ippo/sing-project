@@ -33,6 +33,20 @@ services:
       - ./logs:/data
       - ./student_assistant/data/faq.json:/app/faq.json:ro
 
+  # Telegram-бот преподавателя: документ/FAQ → квиз через DeepSeek.
+  # Нужен TEACHER_BOT_TOKEN в .env. Запуск: docker compose up -d teacher_bot
+  teacher_bot:
+    build: ./teacher_pipeline/bot
+    command: python teacher_bot.py
+    environment:
+      - TELEGRAM_TOKEN=${TEACHER_BOT_TOKEN:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      - PROXY_URL=${PROXY_URL:-}
+      - FAQ_PATH=/app/lecture_faq.json
+    volumes:
+      - ./student_assistant/data/lecture_faq.json:/app/lecture_faq.json:ro
+
   web:
     image: nginx:alpine
     ports:

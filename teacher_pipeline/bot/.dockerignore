@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+downloads/
+quiz_result/
+test_files/
