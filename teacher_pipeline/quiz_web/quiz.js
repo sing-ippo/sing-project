@@ -6,7 +6,19 @@ const numInput = document.getElementById("num-input");
 const genBtn = document.getElementById("gen-btn");
 const fileInput = document.getElementById("file-input");
 const statusEl = document.getElementById("status");
+const progressEl = document.getElementById("progress");
+const debugLog = document.getElementById("debug-log");
 const inputBlock = document.getElementById("input-block");
+
+function dbg(msg, cls) {
+    const ts = new Date().toLocaleTimeString("ru-RU", { hour12: false }) +
+        "." + String(new Date().getMilliseconds()).padStart(3, "0");
+    const line = document.createElement("div");
+    if (cls) line.className = cls;
+    line.textContent = `[${ts}] ${msg}`;
+    debugLog.appendChild(line);
+    debugLog.scrollTop = debugLog.scrollHeight;
+}
 const quizBlock = document.getElementById("quiz-block");
 const questionArea = document.getElementById("question-area");
 const resultArea = document.getElementById("result-area");
@@ -28,32 +40,53 @@ async function requestJSON(url, options) {
 
 async function generateFromText() {
     const text = textInput.value.trim();
-    if (!text) { statusEl.textContent = "Вставьте текст или выберите файл."; return; }
+    if (!text) { dbg("Пустой ввод — вставьте текст или выберите файл.", "dbg-err"); return; }
+    const num = Number(numInput.value) || 5;
+    dbg(`→ POST ${BACKEND_URL}/quiz | текст ${text.length} симв | вопросов ${num}`);
     await runGeneration(() => requestJSON(`${BACKEND_URL}/quiz`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, num_questions: Number(numInput.value) || 5 }),
+        body: JSON.stringify({ text, num_questions: num }),
     }));
 }
 
 async function generateFromFile(file) {
     const form = new FormData();
     form.append("file", file, file.name);
+    dbg(`→ POST ${BACKEND_URL}/quiz_file | файл "${file.name}" ${file.size} байт`);
     await runGeneration(() => requestJSON(`${BACKEND_URL}/quiz_file`, { method: "POST", body: form }));
 }
 
 async function runGeneration(fetcher) {
     genBtn.disabled = true;
-    statusEl.textContent = "⏳ Генерирую квиз через ИИ…";
+    progressEl.hidden = false;
+    const t0 = performance.now();
+    let ticks = 0;
+    statusEl.textContent = "Ждём ответ DeepSeek… 0.0с";
+    const timer = setInterval(() => {
+        ticks += 0.1;
+        statusEl.textContent = `Ждём ответ DeepSeek… ${ticks.toFixed(1)}с`;
+    }, 100);
     try {
         const data = await fetcher();
+        const ms = Math.round(performance.now() - t0);
+        const m = data.meta || {};
+        dbg(`← 200 OK за ${ms} мс`, "dbg-ok");
+        dbg(`meta: модель=${m.model || "?"}, источник=${m.source || "?"}, символов=${m.input_chars ?? "?"}` +
+            (m.chunks != null ? `, чанков=${m.chunks}` : "") +
+            `, сгенерировано=${m.generated ?? "?"}, время сервера=${m.elapsed_ms ?? "?"} мс`);
         quiz = data.quiz || [];
         if (!quiz.length) throw new Error("Пустой квиз");
+        dbg(`Квиз готов: ${quiz.length} вопрос(ов). Запускаю.`, "dbg-ok");
         startQuiz();
     } catch (err) {
+        const ms = Math.round(performance.now() - t0);
+        dbg(`← ОШИБКА за ${ms} мс: ${err.message}`, "dbg-err");
         statusEl.textContent = "Ошибка: " + err.message;
     } finally {
+        clearInterval(timer);
         genBtn.disabled = false;
+        progressEl.hidden = true;
     }
 }
 
