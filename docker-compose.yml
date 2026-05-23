@@ -47,6 +47,16 @@ services:
     volumes:
       - ./student_assistant/data/lecture_faq.json:/app/lecture_faq.json:ro
 
+  # Веб-генератор квизов для преподов (без Telegram): текст/файл → квиз в браузере
+  quiz_server:
+    build: ./teacher_pipeline/bot
+    command: uvicorn quiz_server:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8020:8000"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
+
   web:
     image: nginx:alpine
     ports:
@@ -56,6 +66,8 @@ services:
       - ./teacher_pipeline/pipeline:/usr/share/nginx/html/kiosk:ro
       # Дашборд: http://localhost:3001/dashboard/dashboard.html
       - ./analytics:/usr/share/nginx/html/dashboard:ro
+      # Веб-квиз преподавателя: http://localhost:3001/quiz/quiz.html
+      - ./teacher_pipeline/quiz_web:/usr/share/nginx/html/quiz:ro
 
 volumes:
   model-cache:

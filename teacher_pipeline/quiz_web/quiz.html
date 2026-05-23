@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор квизов — РТУ МИРЭА</title>
+    <link rel="stylesheet" href="quiz.css">
+</head>
+<body>
+    <header>
+        <h1>📝 Генератор квизов для преподавателей</h1>
+        <p class="sub">Вставьте текст лекции или загрузите файл — соберём тест</p>
+    </header>
+
+    <main>
+        <section id="input-block">
+            <textarea id="text-input" placeholder="Вставьте сюда фрагмент лекции, конспекта или темы…"></textarea>
+            <div class="controls">
+                <label>Вопросов:
+                    <input type="number" id="num-input" value="5" min="1" max="10">
+                </label>
+                <button id="gen-btn">Сгенерировать квиз</button>
+                <span class="or">или</span>
+                <label class="file-label">
+                    📎 Файл (.txt/.pdf/.docx)
+                    <input type="file" id="file-input" accept=".txt,.pdf,.docx" hidden>
+                </label>
+            </div>
+            <div id="status"></div>
+        </section>
+
+        <section id="quiz-block" hidden>
+            <div id="question-area"></div>
+            <div id="result-area" hidden></div>
+            <button id="restart-btn" hidden>Новый квиз</button>
+        </section>
+    </main>
+
+    <script src="quiz.js"></script>
+</body>
+</html>

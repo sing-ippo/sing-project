@@ -1,0 +1,123 @@
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #f0f4f8;
+    color: #1a237e;
+}
+
+header {
+    text-align: center;
+    padding: 24px 16px 8px;
+}
+
+header h1 { margin: 0; font-size: 26px; }
+header .sub { color: #555; margin: 6px 0 0; }
+
+main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+#text-input {
+    width: 100%;
+    min-height: 180px;
+    padding: 14px;
+    font-size: 16px;
+    border: 1px solid #cdd7e5;
+    border-radius: 12px;
+    resize: vertical;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.controls label { color: #333; }
+#num-input { width: 56px; padding: 6px; border-radius: 8px; border: 1px solid #cdd7e5; }
+
+#gen-btn, #restart-btn {
+    background: #2196f3;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 16px;
+    cursor: pointer;
+}
+#gen-btn:hover, #restart-btn:hover { background: #1976d2; }
+#gen-btn:disabled { background: #9bbfe0; cursor: default; }
+
+.or { color: #888; }
+.file-label {
+    cursor: pointer;
+    color: #1976d2;
+    text-decoration: underline;
+}
+
+#status { margin-top: 12px; color: #555; min-height: 22px; }
+
+#quiz-block { margin-top: 20px; }
+
+.q-card {
+    background: white;
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+.q-text { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+.q-progress { color: #888; font-size: 14px; margin-bottom: 8px; }
+
+.opt-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: #f5f8ff;
+    border: 1px solid #cdd7e5;
+    border-radius: 10px;
+    padding: 14px;
+    margin: 8px 0;
+    font-size: 16px;
+    cursor: pointer;
+}
+.opt-btn:hover { background: #e8f0fe; }
+.opt-btn.correct { background: #c8e6c9; border-color: #4caf50; }
+.opt-btn.wrong { background: #ffcdd2; border-color: #e53935; }
+.opt-btn:disabled { cursor: default; }
+
+.explanation {
+    margin-top: 12px;
+    padding: 12px;
+    background: #fff8e1;
+    border-radius: 10px;
+    color: #5d4037;
+}
+
+.next-btn {
+    margin-top: 14px;
+    background: #2196f3;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 22px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+#result-area {
+    background: white;
+    border-radius: 14px;
+    padding: 28px;
+    text-align: center;
+    font-size: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+#restart-btn { margin-top: 16px; }

@@ -3,3 +3,6 @@ python-dotenv
 httpx
 PyPDF2
 python-docx
+fastapi
+uvicorn
+python-multipart
