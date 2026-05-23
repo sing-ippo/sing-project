@@ -12,17 +12,17 @@ def load_txt(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
-def load_pdf(path: str) -> str:
+def load_pdf(path):
     try:
-        import PyPDF2
+        from pypdf import PdfReader
     except ImportError:
-        print("[Ошибка] Не установлена библиотека: pip install PyPDF2")
+        print("[Ошибка] Не установлена библиотека: pip install pypdf")
         return ""
 
     text = ""
     try:
         with open(path, "rb") as f:
-            reader = PyPDF2.PdfReader(f)
+            reader = PdfReader(f)
             for page in reader.pages:
                 text += (page.extract_text() or "") + "\n"
     except Exception as e:
@@ -88,24 +88,31 @@ def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> List[Dict
 
     return chunks
 
-def save_chunks(chunks: List[Dict[str, Any]], output_path: str) -> None:
-    with open(output_path, "w", encoding="utf-8") as f:
-        for chunk in chunks:
-            f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
-
-def _get_gemini_client():
+def save_chunks(chunks, output_path):
     try:
-        from google import genai
+        with open(output_path, "w", encoding="utf-8") as f:
+            for chunk in chunks:
+                f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"[Ошибка] Не удалось сохранить chunks.jsonl: {e}")
+
+def _get_gemini_model():
+    try:
+        import google.generativeai as genai
     except ImportError:
-        print("[Ошибка] Не установлена библиотека: pip install google-generativeai")
-        return None
+        return None, "[Ошибка] Не установлена библиотека: pip install google-generativeai"
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        print("[Ошибка] Переменная GEMINI_API_KEY не задана.")
-        return None
+        return None, "[Ошибка] Переменная GEMINI_API_KEY не задана."
 
-    return genai.Client(api_key=api_key)
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(GEMINI_MODEL.replace("models/", ""))
+        return model, None
+    except Exception as e:
+        return None, f"[Ошибка] Не удалось инициализировать Gemini: {e}"
+
 
 def _extract_json_array(raw_text: str) -> List[Dict[str, Any]]:
     if not raw_text:
@@ -143,10 +150,10 @@ def _normalize_quiz(quiz: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     return normalized
 
-def generate_quiz(text: str, num_questions: int = 5) -> List[Dict[str, Any]]:
-    client = _get_gemini_client()
-    if client is None:
-        return []
+def generate_quiz(text: str, num_questions: int = 5):
+    model, error = _get_gemini_model()
+    if error:
+        return {"error": error}
 
     prompt = f"""
 Создай {num_questions} тестовых вопросов по тексту.
@@ -166,24 +173,20 @@ def generate_quiz(text: str, num_questions: int = 5) -> List[Dict[str, Any]]:
 """
 
     try:
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        response = model.generate_content(prompt)
         quiz = _extract_json_array(getattr(response, "text", ""))
-        if not quiz:
-            print("[Ошибка] Нейросеть вернула пустой или некорректный JSON.")
-            return []
-        return _normalize_quiz(quiz)
-    except Exception as e:
-        print(f"[Ошибка] Нейросеть не смогла создать квиз: {e}")
-        return []
 
-def generate_quiz_from_faq(entries: list, num_questions: int = 5) -> List[Dict[str, Any]]:
-    """
-    Принимает список FAQ-записей и возвращает квиз в том же формате,
-    что и generate_quiz().
-    """
+        if not quiz:
+            return {"error": "Нейросеть вернула пустой или некорректный JSON."}
+
+        return _normalize_quiz(quiz)
+
+    except Exception as e:
+        return {"error": f"Не удалось сгенерировать квиз: {str(e)}"}
+
+def generate_quiz_from_faq(entries: list, num_questions: int = 5):
     if not entries:
-        print("[!] FAQ-записи не переданы.")
-        return []
+        return {"error": "FAQ-записи не переданы."}
 
     prepared_entries = []
     for idx, entry in enumerate(entries, start=1):
@@ -198,9 +201,10 @@ def generate_quiz_from_faq(entries: list, num_questions: int = 5) -> List[Dict[s
             prepared_entries.append(f"Запись {idx}: {str(entry)}")
 
     faq_context = "\n\n".join(prepared_entries)
-    client = _get_gemini_client()
-    if client is None:
-        return []
+
+    model, error = _get_gemini_model()
+    if error:
+        return {"error": error}
 
     prompt = f"""
 На основе этих FAQ-вопросов и ответов составь {num_questions} тестовых вопросов для студентов.
@@ -220,23 +224,29 @@ FAQ-записи:
 """
 
     try:
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        response = model.generate_content(prompt)
         quiz = _extract_json_array(getattr(response, "text", ""))
+
         if not quiz:
-            print("[Ошибка] Нейросеть вернула пустой или некорректный JSON для FAQ.")
-            return []
+            return {"error": "Нейросеть вернула пустой или некорректный JSON для FAQ."}
+
         quiz = _normalize_quiz(quiz)
         for item in quiz:
             item["source_chunk_id"] = None
+
         return quiz
+
     except Exception as e:
-        print(f"[Ошибка] Нейросеть не смогла создать FAQ-квиз: {e}")
-        return []
+        return {"error": f"Не удалось сгенерировать квиз: {str(e)}"}
 
 def process_document(file_path: str, num_questions: int = 5) -> dict:
     text = load_document(file_path)
     if not text:
-        return {"chunks": [], "quiz": []}
+        return {
+            "chunks": [],
+            "quiz": [],
+            "error": "Не удалось прочитать документ или файл пуст."
+        }
 
     chunks = chunk_text(text)
     combined_text = ""
@@ -244,9 +254,19 @@ def process_document(file_path: str, num_questions: int = 5) -> dict:
         combined_text += f"[ID:{c['id']}]\n{c['text']}\n\n"
 
     print("-> Документ прочитан. Генерирую вопросы...")
-    quiz = generate_quiz(combined_text, num_questions)
+    quiz_result = generate_quiz(combined_text, num_questions)
 
-    return {"chunks": chunks, "quiz": quiz}
+    if isinstance(quiz_result, dict) and "error" in quiz_result:
+        return {
+            "chunks": chunks,
+            "quiz": [],
+            "error": quiz_result["error"]
+        }
+
+    return {
+        "chunks": chunks,
+        "quiz": quiz_result
+    }
 
 def main():
     parser = argparse.ArgumentParser()
@@ -263,18 +283,20 @@ def main():
 
     result = process_document(args.input, num_questions=args.num_questions)
 
-    if result["chunks"]:
+    if result.get("chunks"):
         chunks_file = os.path.join(args.output_dir, "chunks.jsonl")
         save_chunks(result["chunks"], chunks_file)
         print(f"[+] Чанки сохранены в: {chunks_file}")
 
-    if result["quiz"]:
+    if result.get("error"):
+        print(f"[!] ОБРАБОТКА ПРЕРВАНА: {result['error']}")
+    elif result.get("quiz"):
         output_file = os.path.join(args.output_dir, "quiz.json")
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(result["quiz"], f, ensure_ascii=False, indent=2)
         print(f"[+] ГОТОВО! Квиз сохранен в: {output_file}")
     else:
-        print("[!] ОБРАБОТКА ПРЕРВАНА: Квиз не был создан (проверьте ошибки выше).")
+        print("[!] ОБРАБОТКА ПРЕРВАНА: Квиз не был создан.")
 
     print("=" * 40 + "\n")
 

@@ -1,0 +1,11 @@
+.env
+*.env
+downloads/
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.DS_Store
+requests.jsonl
+suggestions.jsonl
+output/

@@ -141,16 +141,21 @@ async def quiz_faq(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     loop = asyncio.get_event_loop()
     quiz = await loop.run_in_executor(None, generate_quiz_from_faq, entries)
+    if isinstance(quiz, dict) and quiz.get("error"):
+        await msg.edit_text(f"❌ {quiz['error']}")
+        return
 
-    if quiz:
-        context.user_data.update({
-            "quiz": quiz,
-            "current_step": 0,
-            "score": 0
-        })
-        await send_question(update, context)
-    else:
-        await msg.edit_text("❌ Ошибка генерации квиза.")
+    if not isinstance(quiz, list) or not quiz:
+        await msg.edit_text("❌ Не удалось сгенерировать квиз.")
+        return
+
+    context.user_data.update({
+        "quiz": quiz,
+        "current_step": 0,
+        "score": 0
+    })
+
+    await send_question(update, context)
 
 def deduplicate_quiz(quiz):
     seen = set()
@@ -291,16 +296,22 @@ async def handle_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     loop = asyncio.get_event_loop()
     quiz = await loop.run_in_executor(None, generate_quiz_from_faq, entries)
 
-    if quiz:
-        context.user_data.update({
-            "quiz": quiz,
-            "current_step": 0,
-            "score": 0,
-            "selected_topic": topic
-        })
-        await send_question(update, context)
-    else:
-        await query.edit_message_text("❌ Ошибка генерации квиза.")
+    if isinstance(quiz, dict) and quiz.get("error"):
+        await query.edit_message_text(f"❌ {quiz['error']}")
+        return
+
+    if not isinstance(quiz, list) or not quiz:
+        await query.edit_message_text("❌ Не удалось сгенерировать квиз.")
+        return
+
+    context.user_data.update({
+        "quiz": quiz,
+        "current_step": 0,
+        "score": 0,
+        "selected_topic": topic
+    })
+
+    await send_question(update, context)
 
 def main():
     req = HTTPXRequest(proxy=PROXY_URL) if PROXY_URL else None

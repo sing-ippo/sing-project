@@ -1,0 +1,6 @@
+google-generativeai
+python-dotenv
+python-telegram-bot
+pypdf
+python-docx
+httpx
