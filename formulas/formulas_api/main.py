@@ -20,6 +20,7 @@ from formulas_api.formulas_module import (
     extract_formulas,
     is_pix2text_available,
 )
+from formulas_api.enrich import formulas_to_docx, name_formulas
 
 app = FastAPI(title="Formula Extractor API", version="1.2.0")
 app.add_middleware(
@@ -155,3 +156,52 @@ async def extract(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Extraction failed: {exc}") from exc
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+
+
+@app.post("/analyze")
+async def analyze(file: UploadFile = File(...)):
+    """Извлекает формулы и обогащает их названиями/пояснениями через DeepSeek."""
+    data = await file.read()
+    if len(data) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"Файл слишком большой. Лимит {MAX_FILE_SIZE} байт.")
+    if not data:
+        raise HTTPException(status_code=400, detail="Пустой файл.")
+
+    suffix = Path(file.filename or "upload").suffix or ".bin"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+
+    try:
+        formulas = extract_any(tmp_path, file.filename or tmp_path)
+        formulas = name_formulas(formulas, source_title=file.filename or "")
+        return JSONResponse(content={"formulas": formulas})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Pix2TextNotInstalledError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except FormulaExtractionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Analyze failed: {exc}") from exc
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+@app.post("/export/docx")
+async def export_docx(
+    formulas: list = Body(..., embed=True),
+    title: str = Body("Формулы", embed=True),
+):
+    """Собирает .docx с нативными формулами OMML (через pandoc)."""
+    if not formulas:
+        raise HTTPException(status_code=400, detail="Список формул пуст")
+    try:
+        content = formulas_to_docx(formulas, title=title)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"DOCX export failed: {exc}") from exc
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": 'attachment; filename="formulas.docx"'},
+    )

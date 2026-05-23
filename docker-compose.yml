@@ -72,6 +72,8 @@ services:
       - "8001:8000"
     environment:
       - GOTENBERG_URL=http://gotenberg:3000
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
     depends_on:
       - gotenberg
     volumes:
