@@ -20,6 +20,7 @@ from search_engine import (
     search,
     split_words,
 )
+from web_fallback import DEEPSEEK_API_KEY, ask_deepseek, search_mirea
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -80,8 +81,15 @@ def synthesize_answer(answer: str) -> bytes:
     return tensor_to_wav_bytes(audio_tensor, TTS_SAMPLE_RATE)
 
 
+WHISPER_PROMPT = (
+    "Вопрос студента или абитуриента РТУ МИРЭА. Термины: СДО, ЛКС, личный кабинет, "
+    "ВУЦ, деканат, БРС, пересдача, стипендия, общежитие, бакалавриат, магистратура, "
+    "ЕГЭ, приёмная комиссия, День открытых дверей."
+)
+
+
 def transcribe_audio(wav_path: str) -> str:
-    result = whisper_model.transcribe(wav_path, language="ru")
+    result = whisper_model.transcribe(wav_path, language="ru", initial_prompt=WHISPER_PROMPT)
     return result.get("text", "").strip()
 
 
@@ -96,8 +104,9 @@ def has_exact_word_match(question: str, entry: dict) -> bool:
     return bool(question_words & entry_words)
 
 
-def log_request(query: str, answer: str, matched: bool) -> None:
+def log_request(query: str, answer: str, matched: bool, source: str = "none") -> None:
     """Пишет запрос в requests.jsonl в формате, который понимает дашборд аналитики.
+    source — кто ответил: deepseek / faq-offline / none.
     helpful всегда null — у голосового киоска нет UI обратной связи."""
     record = {
         "timestamp": datetime.now().isoformat(),
@@ -105,6 +114,7 @@ def log_request(query: str, answer: str, matched: bool) -> None:
         "answer": answer,
         "matched": matched,
         "helpful": None,
+        "source": source,
     }
     try:
         with REQUESTS_LOG.open("a", encoding="utf-8") as file:
@@ -186,20 +196,29 @@ async def ask(file: UploadFile = File(...)) -> dict:
         if not question:
             raise HTTPException(status_code=400, detail="Не удалось распознать вопрос")
 
-        # Гейт уверенности: отвечаем, только если у лучшего результата есть
-        # хотя бы одно слово, целиком совпадающее со словом вопроса. Иначе
-        # говорим «не нашёл» — чтобы киоск не отвечал уверенной чушью.
-        answer = DEFAULT_FALLBACK_ANSWER
-        matched = False
-        results = await search(question, faq_data, top_n=3)
-        if results:
-            best = results[0]
-            entry = next((e for e in faq_data if e.get("id") == best["id"]), None)
-            if entry and has_exact_word_match(question, entry):
-                answer = best["answer"]
-                matched = True
+        # RAG-комбо: собираем контекст (релевантные FAQ + сниппеты mirea.ru)
+        # и просим DeepSeek сформулировать ответ. При недоступности LLM —
+        # деградация на чистый FAQ с гейтом точного совпадения.
+        faq_candidates = await search(question, faq_data, top_n=3)
+        snippets = await search_mirea(question)
 
-        log_request(question, answer, matched)
+        answer = None
+        source = "none"
+        if DEEPSEEK_API_KEY:
+            answer = await ask_deepseek(question, faq_candidates, snippets)
+            if answer:
+                source = "deepseek"
+
+        if not answer:
+            if faq_candidates:
+                entry = next((e for e in faq_data if e.get("id") == faq_candidates[0]["id"]), None)
+                if entry and has_exact_word_match(question, entry):
+                    answer = faq_candidates[0]["answer"]
+                    source = "faq-offline"
+            if not answer:
+                answer = DEFAULT_FALLBACK_ANSWER
+
+        log_request(question, answer, matched=(source != "none"), source=source)
 
         audio_bytes = synthesize_answer(answer)
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
