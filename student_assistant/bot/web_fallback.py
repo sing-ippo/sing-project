@@ -43,7 +43,7 @@ MIREA_BASE = "https://www.mirea.ru"
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
 _USER_AGENT = "Mozilla/5.0 (compatible; MireaKiosk/1.0)"
 
