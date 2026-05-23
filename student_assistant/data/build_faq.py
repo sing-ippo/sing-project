@@ -26,6 +26,7 @@ FILES = {
     "lectures_faq": SOURCES_DIR / "lecture_faq.json",
     "chats_src": SOURCES_DIR / "student_questions.json",
     "manual_src": SOURCES_DIR / "faq_manual.json",
+    "curated_src": SOURCES_DIR / "faq_curated.json",
     "dod_src": SOURCES_DIR / "dod_raw.json",
 
     "lectures_output": BASE_DIR / "faq_lectures.json",
@@ -302,13 +303,17 @@ def load_data() -> tuple[list[dict], list[dict], list[dict], list[dict]]:
         output_path=FILES["lectures_output"],
     ) or []
 
-    chats = convert_chats(
-        chat_path=FILES["chats_src"],
-        output_path=FILES["chats_output"],
-    ) or []
+    # Сырые чат-вопросы (student_questions.json) исключены из базы ответов:
+    # у них answer="None" — это вопросы без ответов, киоск бы отвечал «None».
+    # Вместо них — курированные ответы faq_curated.json (см. ниже).
+    chats = []
 
     manual = safe_load_json(FILES["manual_src"])
+    curated = safe_load_json(FILES["curated_src"])
     dod = safe_load_json(FILES["dod_src"])
+
+    # Курированные ответы идут вместе с ручными — у обоих реальные ответы.
+    manual = manual + curated
 
     return manual, lectures, chats, dod
 

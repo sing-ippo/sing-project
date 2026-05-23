@@ -4,6 +4,35 @@
 
 Два продукта: **ассистент для студентов** (FAQ-бот) и **ассистент для преподавателей** (документ → квиз).
 
+## 🎤 Демо голосового киоска (День открытых дверей)
+
+Связка для стенда: абитуриент жмёт кнопку, говорит вопрос — киоск отвечает голосом и текстом.
+
+```
+браузер (kiosk.html) → POST /ask → voice_server (Whisper STT → поиск по FAQ → Silero TTS) → голос
+```
+
+### Запуск
+
+```bash
+# 1. Собрать базу знаний (один раз; результат уже закоммичен в bot/faq.json)
+cd student_assistant/data && pip install -r requirements.txt && python build_faq.py
+cp faq.json ../bot/faq.json && cd ../..
+
+# 2. Поднять связку
+docker compose up --build
+```
+
+- Киоск: **http://localhost:3000/kiosk.html**
+- Дашборд аналитики: **http://localhost:3000/dashboard/dashboard.html**
+- API сервера: http://localhost:8000/health
+
+> ⚠️ Первый запуск качает модели Whisper (~500MB) и Silero (~100MB) — нужен интернет. Дальше они в кэше (volume `model-cache`), работает офлайн. **Перед ДОД прогрейте кэш заранее.**
+
+> Микрофон в браузере работает только на `localhost`/`https` — раздача через nginx на localhost подходит.
+
+Логи запросов пишутся в `./logs/requests.jsonl` — этот файл загружают в дашборд для просмотра статистики.
+
 ## Структура репозитория
 
 ```

@@ -1,0 +1,26 @@
+services:
+  voice_server:
+    build: ./student_assistant/bot
+    ports:
+      - "8000:8000"
+    environment:
+      - WHISPER_MODEL=small
+      - REQUESTS_LOG=/data/requests.jsonl
+    volumes:
+      # Кэш моделей Whisper и Silero — чтобы не качать при каждом рестарте
+      - model-cache:/root/.cache
+      # Логи запросов наружу — их грузит дашборд аналитики
+      - ./logs:/data
+
+  web:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      # Киоск в корне: http://localhost:3000/kiosk.html
+      - ./teacher_pipeline/pipeline:/usr/share/nginx/html:ro
+      # Дашборд: http://localhost:3000/dashboard/dashboard.html
+      - ./analytics:/usr/share/nginx/html/dashboard:ro
+
+volumes:
+  model-cache:

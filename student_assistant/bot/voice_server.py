@@ -1,8 +1,10 @@
 import base64
 import io
+import json
 import os
 import subprocess
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +19,7 @@ from search_engine import get_best_answer, load_faq_from_file
 
 BASE_DIR = Path(__file__).resolve().parent
 FAQ_PATH = BASE_DIR / "faq.json"
+REQUESTS_LOG = Path(os.getenv("REQUESTS_LOG", str(BASE_DIR / "requests.jsonl")))
 
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "small")
 TTS_LANGUAGE = "ru"
@@ -75,6 +78,23 @@ def synthesize_answer(answer: str) -> bytes:
 def transcribe_audio(wav_path: str) -> str:
     result = whisper_model.transcribe(wav_path, language="ru")
     return result.get("text", "").strip()
+
+
+def log_request(query: str, answer: str, matched: bool) -> None:
+    """Пишет запрос в requests.jsonl в формате, который понимает дашборд аналитики.
+    helpful всегда null — у голосового киоска нет UI обратной связи."""
+    record = {
+        "timestamp": datetime.now().isoformat(),
+        "query": query,
+        "answer": answer,
+        "matched": matched,
+        "helpful": None,
+    }
+    try:
+        with REQUESTS_LOG.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 @app.on_event("startup")
@@ -146,6 +166,8 @@ async def ask(file: UploadFile = File(...)) -> dict:
 
         faq_result = await get_best_answer(question, faq_data)
         answer = faq_result["answer"]
+
+        log_request(question, answer, faq_result["found"])
 
         audio_bytes = synthesize_answer(answer)
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")

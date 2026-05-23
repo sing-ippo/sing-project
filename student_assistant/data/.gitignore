@@ -1,0 +1,7 @@
+# Промежуточные артефакты сборки (faq.json — деливерабл, его коммитим)
+faq_lectures.json
+faq_chats.json
+faq_with_errors.json
+errors.log
+report.txt
+__pycache__/
