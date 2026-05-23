@@ -13,6 +13,8 @@ services:
       - model-cache:/root/.cache
       # Логи запросов наружу — их грузит дашборд аналитики
       - ./logs:/data
+      # FAQ как volume — правки базы без пересборки образа (нужен лишь restart)
+      - ./student_assistant/bot/faq.json:/app/faq.json:ro
 
   web:
     image: nginx:alpine
