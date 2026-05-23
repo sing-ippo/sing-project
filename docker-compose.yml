@@ -2,7 +2,7 @@ services:
   voice_server:
     build: ./student_assistant/bot
     ports:
-      - "8000:8000"
+      - "8010:8000"
     environment:
       - WHISPER_MODEL=small
       - REQUESTS_LOG=/data/requests.jsonl
@@ -15,10 +15,10 @@ services:
   web:
     image: nginx:alpine
     ports:
-      - "3000:80"
+      - "3001:80"
     volumes:
-      # Киоск в корне: http://localhost:3000/kiosk.html
-      - ./teacher_pipeline/pipeline:/usr/share/nginx/html:ro
+      # Киоск: http://localhost:3000/kiosk/kiosk.html
+      - ./teacher_pipeline/pipeline:/usr/share/nginx/html/kiosk:ro
       # Дашборд: http://localhost:3000/dashboard/dashboard.html
       - ./analytics:/usr/share/nginx/html/dashboard:ro
 

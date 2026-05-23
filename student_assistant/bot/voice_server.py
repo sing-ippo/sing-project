@@ -123,11 +123,17 @@ async def startup_event() -> None:
     faq_data = load_faq_from_file(FAQ_PATH)
     whisper_model = whisper.load_model(WHISPER_MODEL_NAME)
 
+    # Обход бага torch.hub: _validate_not_a_forked_repo падает с
+    # KeyError: 'Authorization', когда не задан GITHUB_TOKEN.
+    if hasattr(torch.hub, "_validate_not_a_forked_repo"):
+        torch.hub._validate_not_a_forked_repo = lambda *args, **kwargs: True
+
     tts_model, _ = torch.hub.load(
         repo_or_dir="snakers4/silero-models",
         model="silero_tts",
         language=TTS_LANGUAGE,
         speaker=TTS_SPEAKER_MODEL,
+        trust_repo=True,  # без этого torch.hub просит подтверждение через input() → EOFError в контейнере
     )
 
     if hasattr(tts_model, "to"):

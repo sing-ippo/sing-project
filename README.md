@@ -23,9 +23,11 @@ cp faq.json ../bot/faq.json && cd ../..
 docker compose up --build
 ```
 
-- Киоск: **http://localhost:3000/kiosk.html**
-- Дашборд аналитики: **http://localhost:3000/dashboard/dashboard.html**
-- API сервера: http://localhost:8000/health
+- Киоск: **http://localhost:3001/kiosk/kiosk.html**
+- Дашборд аналитики: **http://localhost:3001/dashboard/dashboard.html**
+- API сервера: http://localhost:8010/health
+
+> Порты 3001 и 8010 выбраны, чтобы не конфликтовать с частыми занятыми портами (3000/8000). Менять — в `docker-compose.yml` (и `BACKEND_URL` в `teacher_pipeline/pipeline/kiosk.js`, если меняешь порт сервера).
 
 > ⚠️ Первый запуск качает модели Whisper (~500MB) и Silero (~100MB) — нужен интернет. Дальше они в кэше (volume `model-cache`), работает офлайн. **Перед ДОД прогрейте кэш заранее.**
 
