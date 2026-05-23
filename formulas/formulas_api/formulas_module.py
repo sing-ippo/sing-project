@@ -226,6 +226,95 @@ def extract_formulas(
         doc.close()
 
 
+def _recognize_pil(image: Image.Image, page_num: int = 1) -> List[Dict[str, Any]]:
+    """Распознаёт формулы на одном изображении через pix2text (без PDF-контекста)."""
+    Pix2Text = _load_pix2text()
+    p2t = Pix2Text.from_config(enable_table=False)
+    blocks = p2t.recognize_text_formula(image, return_text=False, resized_shape=768, mfr_batch_size=1)
+
+    results: list[dict[str, Any]] = []
+    fid = 1
+    for block in blocks:
+        block_type = block.get("type")
+        text = _clean_latex(block.get("text") or "")
+        score = block.get("score")
+        if not text or block_type not in FORMULA_TYPES:
+            continue
+        if not _LATEXISH_RE.search(text):
+            continue
+        if not isinstance(score, (int, float)) or score < 0.8:
+            continue
+        results.append({
+            "formula_id": fid,
+            "page": page_num,
+            "latex": text,
+            "context": "",
+            "method": "pix2text",
+            "confidence": float(score),
+        })
+        fid += 1
+    return results
+
+
+def extract_image(path: str) -> List[Dict[str, Any]]:
+    image = Image.open(path).convert("RGB")
+    return _recognize_pil(image, page_num=1)
+
+
+_TEXT_LATEX_RE = re.compile(r"\$\$(.+?)\$\$|\\\[(.+?)\\\]|\\\((.+?)\\\)|\$([^$\n]+?)\$", re.DOTALL)
+
+
+def _latex_from_text(text: str) -> List[str]:
+    found: list[str] = []
+    for match in _TEXT_LATEX_RE.finditer(text):
+        expr = next((g for g in match.groups() if g), "")
+        expr = expr.strip()
+        if expr:
+            found.append(expr)
+    return found
+
+
+def extract_text_file(path: str, method: str = "text-regex") -> List[Dict[str, Any]]:
+    with open(path, encoding="utf-8", errors="ignore") as f:
+        text = f.read()
+    return [
+        {"formula_id": i, "page": None, "latex": latex, "context": "", "method": method, "confidence": None}
+        for i, latex in enumerate(_latex_from_text(text), start=1)
+    ]
+
+
+def extract_docx(path: str) -> List[Dict[str, Any]]:
+    import subprocess
+    try:
+        proc = subprocess.run(
+            ["pandoc", path, "-t", "latex"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except FileNotFoundError as exc:
+        raise FormulaExtractionError("pandoc не установлен (нужен для .docx)") from exc
+    if proc.returncode != 0:
+        raise FormulaExtractionError(f"pandoc не смог конвертировать docx: {proc.stderr.strip()[:200]}")
+    return [
+        {"formula_id": i, "page": None, "latex": latex, "context": "", "method": "pandoc", "confidence": None}
+        for i, latex in enumerate(_latex_from_text(proc.stdout), start=1)
+    ]
+
+
+def extract_any(path: str, filename: str) -> List[Dict[str, Any]]:
+    """Диспетчер по типу файла. Возвращает тот же контракт, что extract_formulas."""
+    name = (filename or path).lower()
+    ext = name.rsplit(".", 1)[-1] if "." in name else ""
+    if ext == "pdf":
+        return extract_formulas(path)
+    if ext in {"png", "jpg", "jpeg", "webp", "bmp", "gif"}:
+        return extract_image(path)
+    if ext == "docx":
+        return extract_docx(path)
+    if ext in {"txt", "md", "tex"}:
+        return extract_text_file(path)
+    raise ValueError(f"Неподдерживаемый тип файла: .{ext or '?'} (поддерживаются pdf, png, jpg, docx, txt, md, tex)")
+
+
 def write_jsonl(formulas: Sequence[Dict[str, Any]], output_path: str) -> None:
     import json
 
@@ -241,6 +330,10 @@ __all__ = [
     "FormulaExtractionError",
     "Pix2TextNotInstalledError",
     "extract_formulas",
+    "extract_any",
+    "extract_image",
+    "extract_docx",
+    "extract_text_file",
     "is_pix2text_available",
     "write_jsonl",
 ]

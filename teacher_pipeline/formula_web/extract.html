@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Извлечение формул — РТУ МИРЭА</title>
+    <link rel="stylesheet" href="vendor/katex/katex.min.css">
+    <link rel="stylesheet" href="extract.css">
+    <script defer src="vendor/katex/katex.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>🔣 Извлечение формул из документов</h1>
+        <p class="sub">PDF, картинка (png/jpg), docx, txt — вытащим формулы в LaTeX</p>
+    </header>
+
+    <main>
+        <section id="input-block">
+            <label class="file-label">
+                📎 Выбрать документ
+                <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.docx,.txt,.md,.tex" hidden>
+            </label>
+            <span id="file-name"></span>
+
+            <div id="progress" hidden>
+                <div class="bar"><div class="bar-fill"></div></div>
+                <div id="status"></div>
+            </div>
+            <details id="debug-box" open>
+                <summary>Дебаг</summary>
+                <pre id="debug-log"></pre>
+            </details>
+        </section>
+
+        <section id="results"></section>
+    </main>
+
+    <script src="extract.js"></script>
+</body>
+</html>

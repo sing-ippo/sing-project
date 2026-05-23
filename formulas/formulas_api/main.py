@@ -10,11 +10,24 @@ import matplotlib
 matplotlib.use("Agg")  # without GUI
 import matplotlib.pyplot as plt
 from fastapi import Body, FastAPI, File, HTTPException, Query, Response, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from formulas_api.formulas_module import Pix2TextNotInstalledError, extract_formulas, is_pix2text_available
+from formulas_api.formulas_module import (
+    FormulaExtractionError,
+    Pix2TextNotInstalledError,
+    extract_any,
+    extract_formulas,
+    is_pix2text_available,
+)
 
-app = FastAPI(title="Formula Extractor API", version="1.1.0")
+app = FastAPI(title="Formula Extractor API", version="1.2.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 MAX_LATEX_LENGTH = 500
@@ -115,33 +128,29 @@ async def render_formula(latex: str = Body(..., embed=True)) -> Response:
 
 
 @app.post("/extract")
-async def extract(
-    file: UploadFile = File(...),
-    pages: Optional[str] = Query(default=None, description="Comma-separated page numbers, e.g. 1,2,5"),
-):
-    if file.content_type not in {"application/pdf", "application/x-pdf"} and not str(file.filename or "").lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Uploaded file must be a PDF.")
-
-    selected_pages = parse_pages_param(pages)
-
+async def extract(file: UploadFile = File(...)):
+    """Извлекает формулы из документа любого поддерживаемого типа:
+    PDF и картинки (png/jpg) — через pix2text; docx — через pandoc; txt/md/tex — регуляркой."""
     data = await file.read()
-    if not data.startswith(b"%PDF"):
-        raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF.")
     if len(data) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail=f"File is too large. Max size is {MAX_FILE_SIZE} bytes.")
+        raise HTTPException(status_code=413, detail=f"Файл слишком большой. Лимит {MAX_FILE_SIZE} байт.")
+    if not data:
+        raise HTTPException(status_code=400, detail="Пустой файл.")
 
-    suffix = Path(file.filename or "upload.pdf").suffix or ".pdf"
+    suffix = Path(file.filename or "upload").suffix or ".bin"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(data)
         tmp_path = tmp.name
 
     try:
-        formulas = extract_formulas(tmp_path, pages=selected_pages)
+        formulas = extract_any(tmp_path, file.filename or tmp_path)
         return JSONResponse(content=formulas)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Pix2TextNotInstalledError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except HTTPException:
-        raise
+    except FormulaExtractionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Extraction failed: {exc}") from exc
     finally:

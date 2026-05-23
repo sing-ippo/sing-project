@@ -119,6 +119,7 @@ function renderQuestion() {
 
     questionArea.innerHTML = "";
     questionArea.appendChild(card);
+    renderMath(card);
 }
 
 function answer(choice, card, q) {
@@ -135,6 +136,7 @@ function answer(choice, card, q) {
         exp.className = "explanation";
         exp.textContent = "💡 " + q.explanation;
         card.appendChild(exp);
+        renderMath(exp);
     }
 
     const next = document.createElement("button");
@@ -159,6 +161,22 @@ function escapeHtml(s) {
     const d = document.createElement("div");
     d.textContent = s == null ? "" : s;
     return d.innerHTML;
+}
+
+// Рендер LaTeX-формул ($...$) через KaTeX. Битый LaTeX не валит страницу.
+function renderMath(el) {
+    if (!window.renderMathInElement) return;
+    try {
+        renderMathInElement(el, {
+            delimiters: [
+                { left: "$$", right: "$$", display: true },
+                { left: "$", right: "$", display: false },
+            ],
+            throwOnError: false,
+        });
+    } catch (e) {
+        console.error("KaTeX:", e);
+    }
 }
 
 genBtn.addEventListener("click", generateFromText);

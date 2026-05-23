@@ -57,6 +57,15 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
 
+  # Сервис извлечения/рендера формул (pix2text + pandoc). Тяжёлый (~2GB моделей).
+  formulas:
+    build: ./formulas
+    command: uvicorn formulas_api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8001:8000"
+    volumes:
+      - model-cache:/root/.cache
+
   web:
     image: nginx:alpine
     ports:
@@ -68,6 +77,8 @@ services:
       - ./analytics:/usr/share/nginx/html/dashboard:ro
       # Веб-квиз преподавателя: http://localhost:3001/quiz/quiz.html
       - ./teacher_pipeline/quiz_web:/usr/share/nginx/html/quiz:ro
+      # Извлечение формул: http://localhost:3001/formulas/extract.html
+      - ./teacher_pipeline/formula_web:/usr/share/nginx/html/formulas:ro
 
 volumes:
   model-cache:
