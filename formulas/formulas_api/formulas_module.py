@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import io
+import os
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import fitz  # PyMuPDF
+import httpx
 from PIL import Image
+
+GOTENBERG_URL = os.getenv("GOTENBERG_URL", "http://gotenberg:3000")
 
 
 class FormulaExtractionError(Exception):
@@ -283,36 +289,112 @@ def extract_text_file(path: str, method: str = "text-regex") -> List[Dict[str, A
     ]
 
 
-def extract_docx(path: str) -> List[Dict[str, Any]]:
-    import subprocess
+def extract_pandoc(path: str) -> List[Dict[str, Any]]:
+    """Нативные уравнения через pandoc → LaTeX (docx/odt/html/epub/md/tex/rtf…)."""
     try:
         proc = subprocess.run(
             ["pandoc", path, "-t", "latex"],
             capture_output=True, text=True, timeout=60,
         )
     except FileNotFoundError as exc:
-        raise FormulaExtractionError("pandoc не установлен (нужен для .docx)") from exc
+        raise FormulaExtractionError("pandoc не установлен") from exc
     if proc.returncode != 0:
-        raise FormulaExtractionError(f"pandoc не смог конвертировать docx: {proc.stderr.strip()[:200]}")
+        raise FormulaExtractionError(f"pandoc ошибка: {proc.stderr.strip()[:200]}")
     return [
         {"formula_id": i, "page": None, "latex": latex, "context": "", "method": "pandoc", "confidence": None}
         for i, latex in enumerate(_latex_from_text(proc.stdout), start=1)
     ]
 
 
+def office_to_pdf(path: str, filename: str) -> str:
+    """Конвертирует офисный документ в PDF через сервис Gotenberg (LibreOffice внутри).
+    Возвращает путь к временному PDF."""
+    url = f"{GOTENBERG_URL}/forms/libreoffice/convert"
+    try:
+        with open(path, "rb") as f:
+            resp = httpx.post(url, files={"files": (filename, f)}, timeout=120.0)
+        resp.raise_for_status()
+    except Exception as exc:
+        raise FormulaExtractionError(f"Gotenberg не сконвертировал документ: {exc}") from exc
+
+    if not resp.content.startswith(b"%PDF"):
+        raise FormulaExtractionError("Gotenberg вернул не PDF")
+
+    fd, pdf_path = tempfile.mkstemp(suffix=".pdf")
+    with os.fdopen(fd, "wb") as out:
+        out.write(resp.content)
+    return pdf_path
+
+
+def _norm_latex(s: str) -> str:
+    return re.sub(r"\s+", "", s or "")
+
+
+def _dedup(formulas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Убирает точные дубли по нормализованному LaTeX (pandoc приоритетнее pix2text),
+    перенумеровывает formula_id."""
+    by_key: dict[str, Dict[str, Any]] = {}
+    for item in formulas:
+        key = _norm_latex(item.get("latex", ""))
+        if not key:
+            continue
+        prev = by_key.get(key)
+        if prev is None or (item.get("method") == "pandoc" and prev.get("method") != "pandoc"):
+            by_key[key] = item
+    result = list(by_key.values())
+    for i, item in enumerate(result, start=1):
+        item["formula_id"] = i
+    return result
+
+
+IMAGE_EXTS = {"png", "jpg", "jpeg", "webp", "bmp", "gif"}
+TEXT_EXTS = {"txt", "md", "tex"}
+PANDOC_EXTS = {"docx", "odt", "rtf", "html", "htm", "epub", "md", "markdown", "tex", "latex", "rst", "org"}
+OFFICE_OCR_EXTS = {"docx", "doc", "ppt", "pptx", "odt", "ods", "odp", "rtf", "xls", "xlsx"}
+
+
 def extract_any(path: str, filename: str) -> List[Dict[str, Any]]:
-    """Диспетчер по типу файла. Возвращает тот же контракт, что extract_formulas."""
+    """Максимальный охват: объединяет все применимые источники, дедупит."""
     name = (filename or path).lower()
     ext = name.rsplit(".", 1)[-1] if "." in name else ""
+
+    if ext in IMAGE_EXTS:
+        return extract_image(path)
     if ext == "pdf":
         return extract_formulas(path)
-    if ext in {"png", "jpg", "jpeg", "webp", "bmp", "gif"}:
-        return extract_image(path)
-    if ext == "docx":
-        return extract_docx(path)
-    if ext in {"txt", "md", "tex"}:
-        return extract_text_file(path)
-    raise ValueError(f"Неподдерживаемый тип файла: .{ext or '?'} (поддерживаются pdf, png, jpg, docx, txt, md, tex)")
+
+    results: List[Dict[str, Any]] = []
+    errors: List[str] = []
+
+    if ext in PANDOC_EXTS:
+        try:
+            results += extract_pandoc(path)
+        except Exception as exc:
+            errors.append(f"pandoc: {exc}")
+    if ext in TEXT_EXTS:
+        try:
+            results += extract_text_file(path)
+        except Exception as exc:
+            errors.append(f"text: {exc}")
+    if ext in OFFICE_OCR_EXTS or not results:
+        # Визуальный проход через Gotenberg→pix2text (ловит формулы-картинки и бинарные форматы)
+        pdf_path = None
+        try:
+            pdf_path = office_to_pdf(path, filename or "document")
+            results += extract_formulas(pdf_path)
+        except Exception as exc:
+            errors.append(f"gotenberg/pix2text: {exc}")
+        finally:
+            if pdf_path and os.path.exists(pdf_path):
+                os.unlink(pdf_path)
+
+    if not results:
+        if ext and ext not in (PANDOC_EXTS | TEXT_EXTS | OFFICE_OCR_EXTS):
+            raise ValueError(f"Неподдерживаемый тип файла: .{ext}")
+        # формат поддержан, но формул не нашли (или все источники упали)
+        if errors:
+            raise FormulaExtractionError("; ".join(errors))
+    return _dedup(results)
 
 
 def write_jsonl(formulas: Sequence[Dict[str, Any]], output_path: str) -> None:
@@ -332,8 +414,9 @@ __all__ = [
     "extract_formulas",
     "extract_any",
     "extract_image",
-    "extract_docx",
+    "extract_pandoc",
     "extract_text_file",
+    "office_to_pdf",
     "is_pix2text_available",
     "write_jsonl",
 ]

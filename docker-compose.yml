@@ -57,12 +57,23 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
 
+  # Конвертер офисных документов в PDF (LibreOffice+Chromium внутри) — для извлечения формул
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    command:
+      - gotenberg
+      - --api-timeout=180s
+
   # Сервис извлечения/рендера формул (pix2text + pandoc). Тяжёлый (~2GB моделей).
   formulas:
     build: ./formulas
     command: uvicorn formulas_api.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8001:8000"
+    environment:
+      - GOTENBERG_URL=http://gotenberg:3000
+    depends_on:
+      - gotenberg
     volumes:
       - model-cache:/root/.cache
 
