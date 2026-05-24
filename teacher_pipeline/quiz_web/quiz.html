@@ -10,39 +10,71 @@
     <script defer src="vendor/katex/contrib/auto-render.min.js"></script>
 </head>
 <body>
+    <a href="/portal/" class="home-link">← В меню</a>
+
     <header>
-        <h1>📝 Генератор квизов для преподавателей</h1>
-        <p class="sub">Вставьте текст лекции или загрузите файл — соберём тест</p>
+        <h1>Генератор квизов</h1>
+        <p class="sub">Текст или документ → готовый тест с проверкой</p>
     </header>
 
     <main>
-        <section id="input-block">
-            <textarea id="text-input" placeholder="Вставьте сюда фрагмент лекции, конспекта или темы…"></textarea>
+        <section id="input-block" class="card">
+            <div class="segmented" role="tablist">
+                <button id="mode-text" class="seg active" type="button">📝 Текст</button>
+                <button id="mode-doc" class="seg" type="button">📄 Документ</button>
+            </div>
+
+            <!-- Режим: текст -->
+            <div id="pane-text" class="pane">
+                <textarea id="text-input" placeholder="Вставьте фрагмент лекции, конспекта или темы…"></textarea>
+            </div>
+
+            <!-- Режим: документ -->
+            <div id="pane-doc" class="pane" hidden>
+                <label class="dropzone" id="dropzone">
+                    <input type="file" id="file-input" accept=".pdf,.docx,.txt" hidden>
+                    <span class="dz-icon">⬆️</span>
+                    <span class="dz-text" id="file-name">Выбрать документ (.pdf / .docx / .txt)</span>
+                </label>
+                <div class="doc-opts">
+                    <label>Страницы (PDF)
+                        <input type="text" id="pages-input" placeholder="напр. 1-10">
+                    </label>
+                    <label>Тема (необязательно)
+                        <input type="text" id="topic-input" placeholder="напр. интегралы">
+                    </label>
+                </div>
+            </div>
+
             <div class="controls">
-                <label>Вопросов:
+                <label class="num-field">Вопросов
                     <input type="number" id="num-input" value="5" min="1" max="10">
                 </label>
-                <button id="gen-btn">Сгенерировать квиз</button>
-                <span class="or">или</span>
-                <label class="file-label">
-                    📎 Файл (.txt/.pdf/.docx)
-                    <input type="file" id="file-input" accept=".txt,.pdf,.docx" hidden>
-                </label>
+                <button id="gen-btn" type="button">Сгенерировать квиз</button>
             </div>
+
             <div id="progress" hidden>
                 <div class="bar"><div class="bar-fill"></div></div>
                 <div id="status"></div>
             </div>
-            <details id="debug-box" open>
-                <summary>Дебаг</summary>
+
+            <details id="debug-box">
+                <summary>Подробности</summary>
                 <pre id="debug-log"></pre>
             </details>
         </section>
 
-        <section id="quiz-block" hidden>
+        <section id="quiz-block" class="card" hidden>
+            <div id="quiz-toolbar">
+                <select id="export-format">
+                    <option value="xml">Moodle XML</option>
+                    <option value="gift">GIFT</option>
+                </select>
+                <button id="export-btn" type="button">⬇ Скачать для Moodle</button>
+            </div>
             <div id="question-area"></div>
             <div id="result-area" hidden></div>
-            <button id="restart-btn" hidden>Новый квиз</button>
+            <button id="restart-btn" type="button" hidden>Новый квиз</button>
         </section>
     </main>
 

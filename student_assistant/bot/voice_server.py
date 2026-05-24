@@ -22,7 +22,7 @@ from search_engine import (
     search,
     split_words,
 )
-from web_fallback import DEEPSEEK_API_KEY, ask_deepseek, search_mirea
+from web_fallback import DEEPSEEK_API_KEY, _STOPWORDS, ask_deepseek, search_mirea
 
 from pymorphy3 import MorphAnalyzer
 
@@ -202,6 +202,123 @@ async def startup_event() -> None:
         tts_model.to("cpu")
 
 
+# URL: полные ссылки или «голые» домены. Lookbehind (?<![@\w.]) бережёт email (pk@mirea.ru).
+_URL_RE = re.compile(
+    r"https?://[^\s)]+|(?<![@\w.])(?:[a-z0-9-]+\.)+(?:ru|рф|com|org)(?:/[^\s)]*)?",
+    re.IGNORECASE,
+)
+# Низкокачественные/новостные пути — их в карточки не пускаем
+_JUNK_PATHS = ("/news/", "/press", "/announc", "/search")
+# Голый корень главного сайта — не «полезная ссылка» (а вот online-edu.mirea.ru и т.п. — да)
+_GENERIC_URLS = {"mirea.ru", "www.mirea.ru"}
+# Леммы названия вуза/общих слов — они есть на каждой странице, по ним нельзя судить о релевантности
+_GENERIC_TERMS = {"мирэа", "ртэ", "мирэ", "университет", "вуз", "mirea", "rtu"}
+
+
+def _extract_urls(text: str) -> list[str]:
+    """Достаёт ссылки из текста ответа, нормализует: добавляет схему, срезает хвост."""
+    urls: list[str] = []
+    for raw in _URL_RE.findall(text or ""):
+        url = raw.rstrip(".,);:")
+        if not url.startswith("http"):
+            url = "https://" + url
+        urls.append(url)
+    return urls
+
+
+def _norm_url(url: str) -> str:
+    """Ключ для дедупа: без схемы, без хвостового слэша, в нижнем регистре."""
+    return re.sub(r"^https?://", "", url.lower()).rstrip("/")
+
+
+def build_sources(lemmatized: str, faq_candidates: list[dict], snippets: list[dict]) -> list[dict]:
+    """«Полезные ссылки»: сперва канон из совпавших FAQ-ответов, иначе —
+    строго отфильтрованный веб (без новостей, с совпадением слов). Пусто — если нечего показать."""
+    sources: list[dict] = []
+    seen: set[str] = set()
+
+    # 1) Канон из FAQ — только для кандидатов, реально совпавших с вопросом
+    for cand in faq_candidates[:3]:
+        entry = next((e for e in faq_data if e.get("id") == cand.get("id")), None)
+        if not (entry and has_exact_word_match(lemmatized, entry)):
+            continue
+        # первый «полезный» URL ответа (не голый корень mirea.ru, не дубль)
+        url = next((u for u in _extract_urls(cand.get("answer", ""))
+                    if _norm_url(u) not in _GENERIC_URLS and _norm_url(u) not in seen), None)
+        if not url:
+            continue
+        seen.add(_norm_url(url))
+        answer_text = cand.get("answer", "")
+        sources.append({
+            "title": cand.get("question", ""),
+            "url": url,
+            "snippet": answer_text[:130] + ("…" if len(answer_text) > 130 else ""),
+        })
+        if len(sources) >= 3:
+            return sources
+
+    if sources:
+        return sources
+
+    # 2) Фолбэк — отфильтрованный поиск mirea.ru (только если из базы ничего не вышло).
+    # Совпадение считаем по СОДЕРЖАТЕЛЬНЫМ словам: название вуза («мирэа») есть везде,
+    # по нему судить о релевантности нельзя.
+    content_lemmas = {
+        t for t in lemmatized.split()
+        if len(t) >= 3 and t not in _GENERIC_TERMS and t not in _STOPWORDS
+    }
+    if not content_lemmas:
+        return sources
+    # Сколько содержательных слов вопроса должно встретиться в сниппете. Если в вопросе
+    # 2+ значимых слова — требуем хотя бы два: одно случайное совпадение (полисемия,
+    # напр. «канал» связи в диссертации) не делает ссылку релевантной.
+    need = 2 if len(content_lemmas) >= 2 else 1
+    for s in snippets:
+        url = s.get("url", "")
+        if any(p in url.lower() for p in _JUNK_PATHS):
+            continue
+        text_lemmas = set(lemmatize(f"{s.get('title', '')} {s.get('snippet', '')}").split())
+        if len(content_lemmas & text_lemmas) < need:
+            continue
+        key = _norm_url(url)
+        if not url or key in seen or key in _GENERIC_URLS:
+            continue
+        seen.add(key)
+        sources.append({"title": s.get("title", ""), "url": url, "snippet": s.get("snippet", "")})
+        if len(sources) >= 3:
+            break
+    return sources
+
+
+async def answer_question(question: str, history: list[dict] | None = None) -> dict:
+    """Единый движок ответа: релевантные FAQ + сниппеты mirea.ru → DeepSeek.
+    При недоступности LLM — деградация на чистый FAQ с гейтом точного совпадения.
+    history — прошлые ходы диалога [{role, content}] для кореференции (только для генерации;
+    ретрив идёт по текущему вопросу). Возвращает {answer, source, sources}; STT/TTS — см. /ask."""
+    lemmatized = lemmatize(question)
+    faq_candidates = await search(lemmatized, faq_data, top_n=5)
+    snippets = await search_mirea(question)
+
+    answer = None
+    source = "none"
+    if DEEPSEEK_API_KEY:
+        answer = await ask_deepseek(question, faq_candidates, snippets, history=history)
+        if answer:
+            source = "deepseek"
+
+    if not answer:
+        if faq_candidates:
+            entry = next((e for e in faq_data if e.get("id") == faq_candidates[0]["id"]), None)
+            if entry and has_exact_word_match(lemmatized, entry):
+                answer = faq_candidates[0]["answer"]
+                source = "faq-offline"
+        if not answer:
+            answer = DEFAULT_FALLBACK_ANSWER
+
+    sources = build_sources(lemmatized, faq_candidates, snippets)
+    return {"answer": answer, "source": source, "sources": sources}
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
@@ -248,28 +365,9 @@ async def ask(file: UploadFile = File(...)) -> dict:
         if not question:
             raise HTTPException(status_code=400, detail="Не удалось распознать вопрос")
 
-        # RAG-комбо: собираем контекст (релевантные FAQ + сниппеты mirea.ru)
-        # и просим DeepSeek сформулировать ответ. При недоступности LLM —
-        # деградация на чистый FAQ с гейтом точного совпадения.
-        lemmatized = lemmatize(question)
-        faq_candidates = await search(lemmatized, faq_data, top_n=5)
-        snippets = await search_mirea(question)
-
-        answer = None
-        source = "none"
-        if DEEPSEEK_API_KEY:
-            answer = await ask_deepseek(question, faq_candidates, snippets)
-            if answer:
-                source = "deepseek"
-
-        if not answer:
-            if faq_candidates:
-                entry = next((e for e in faq_data if e.get("id") == faq_candidates[0]["id"]), None)
-                if entry and has_exact_word_match(lemmatized, entry):
-                    answer = faq_candidates[0]["answer"]
-                    source = "faq-offline"
-            if not answer:
-                answer = DEFAULT_FALLBACK_ANSWER
+        result = await answer_question(question)
+        answer = result["answer"]
+        source = result["source"]
 
         request_id = uuid.uuid4().hex
         log_request(request_id, question, answer, matched=(source != "none"), source=source)
@@ -301,6 +399,45 @@ async def ask(file: UploadFile = File(...)) -> dict:
                     Path(path).unlink()
                 except OSError:
                     pass
+
+
+def _clean_history(raw: list) -> list[dict]:
+    """Готовит историю диалога от клиента к передаче в LLM: только роли user/assistant,
+    непустой текстовый content (обрезан), последние 6 ходов — защита от раздувания промпта."""
+    cleaned: list[dict] = []
+    for item in raw or []:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            cleaned.append({"role": role, "content": content.strip()[:800]})
+    return cleaned[-6:]
+
+
+@app.post("/ask_text")
+async def ask_text(question: str = Body(..., embed=True), history: list = Body(default=[], embed=True)) -> dict:
+    """Текстовая альтернатива /ask: вопрос строкой → ответ строкой (без речи).
+    history — прошлые ходы диалога для кореференции follow-up-вопросов.
+    Тот же движок answer_question; ответ с реальными URL (без make_speakable)."""
+    question = (question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Пустой вопрос")
+
+    result = await answer_question(question, history=_clean_history(history))
+    answer = result["answer"]
+    source = result["source"]
+
+    request_id = uuid.uuid4().hex
+    log_request(request_id, question, answer, matched=(source != "none"), source=source)
+
+    return {
+        "request_id": request_id,
+        "question": question,
+        "answer": answer,
+        "source": source,
+        "sources": result.get("sources", []),
+    }
 
 
 @app.post("/feedback")

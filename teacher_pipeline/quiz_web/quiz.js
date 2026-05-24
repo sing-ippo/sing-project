@@ -1,83 +1,115 @@
 // Адрес сервера генерации квизов. Менять только здесь.
 const BACKEND_URL = "http://localhost:8020";
 
+const modeTextBtn = document.getElementById("mode-text");
+const modeDocBtn = document.getElementById("mode-doc");
+const paneText = document.getElementById("pane-text");
+const paneDoc = document.getElementById("pane-doc");
 const textInput = document.getElementById("text-input");
+const fileInput = document.getElementById("file-input");
+const fileNameEl = document.getElementById("file-name");
+const pagesInput = document.getElementById("pages-input");
+const topicInput = document.getElementById("topic-input");
 const numInput = document.getElementById("num-input");
 const genBtn = document.getElementById("gen-btn");
-const fileInput = document.getElementById("file-input");
-const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
+const statusEl = document.getElementById("status");
 const debugLog = document.getElementById("debug-log");
 const inputBlock = document.getElementById("input-block");
+const quizBlock = document.getElementById("quiz-block");
+const exportFormat = document.getElementById("export-format");
+const exportBtn = document.getElementById("export-btn");
+const questionArea = document.getElementById("question-area");
+const resultArea = document.getElementById("result-area");
+const restartBtn = document.getElementById("restart-btn");
+
+let mode = "text"; // "text" | "document"
+let quiz = [];
+let current = 0;
+let score = 0;
 
 function dbg(msg, cls) {
-    const ts = new Date().toLocaleTimeString("ru-RU", { hour12: false }) +
-        "." + String(new Date().getMilliseconds()).padStart(3, "0");
+    const now = new Date();
+    const ts = now.toLocaleTimeString("ru-RU", { hour12: false }) +
+        "." + String(now.getMilliseconds()).padStart(3, "0");
     const line = document.createElement("div");
     if (cls) line.className = cls;
     line.textContent = `[${ts}] ${msg}`;
     debugLog.appendChild(line);
     debugLog.scrollTop = debugLog.scrollHeight;
 }
-const quizBlock = document.getElementById("quiz-block");
-const questionArea = document.getElementById("question-area");
-const resultArea = document.getElementById("result-area");
-const restartBtn = document.getElementById("restart-btn");
 
-let quiz = [];
-let current = 0;
-let score = 0;
-
-async function requestJSON(url, options) {
-    const resp = await fetch(url, options);
-    if (!resp.ok) {
-        let detail = `HTTP ${resp.status}`;
-        try { detail = (await resp.json()).detail || detail; } catch (e) {}
-        throw new Error(detail);
-    }
-    return resp.json();
+// --- Переключатель режима ---
+function setMode(next) {
+    mode = next;
+    const isText = next === "text";
+    modeTextBtn.classList.toggle("active", isText);
+    modeDocBtn.classList.toggle("active", !isText);
+    paneText.hidden = !isText;
+    paneDoc.hidden = isText;
 }
+modeTextBtn.addEventListener("click", () => setMode("text"));
+modeDocBtn.addEventListener("click", () => setMode("document"));
 
-async function generateFromText() {
-    const text = textInput.value.trim();
-    if (!text) { dbg("Пустой ввод — вставьте текст или выберите файл.", "dbg-err"); return; }
+fileInput.addEventListener("change", () => {
+    fileNameEl.textContent = fileInput.files.length
+        ? fileInput.files[0].name
+        : "Выбрать документ (.pdf / .docx / .txt)";
+});
+
+// --- Генерация: единый FormData на POST /quiz ---
+genBtn.addEventListener("click", generate);
+
+async function generate() {
     const num = Number(numInput.value) || 5;
-    dbg(`→ POST ${BACKEND_URL}/quiz | текст ${text.length} симв | вопросов ${num}`);
-    await runGeneration(() => requestJSON(`${BACKEND_URL}/quiz`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, num_questions: num }),
-    }));
-}
-
-async function generateFromFile(file) {
     const form = new FormData();
-    form.append("file", file, file.name);
-    dbg(`→ POST ${BACKEND_URL}/quiz_file | файл "${file.name}" ${file.size} байт`);
-    await runGeneration(() => requestJSON(`${BACKEND_URL}/quiz_file`, { method: "POST", body: form }));
-}
+    form.append("num_questions", String(num));
 
-async function runGeneration(fetcher) {
+    if (mode === "text") {
+        const text = textInput.value.trim();
+        if (!text) { dbg("Пустой ввод — вставьте текст.", "dbg-err"); return; }
+        form.append("text", text);
+        dbg(`→ POST /quiz | текст ${text.length} симв | вопросов ${num}`);
+    } else {
+        if (!fileInput.files.length) { dbg("Выберите документ.", "dbg-err"); return; }
+        const file = fileInput.files[0];
+        form.append("file", file, file.name);
+        form.append("pages", pagesInput.value.trim());
+        form.append("topic", topicInput.value.trim());
+        dbg(`→ POST /quiz | файл "${file.name}" | страницы: ${pagesInput.value || "авто"} | тема: ${topicInput.value || "—"} | вопросов ${num}`);
+    }
+
     genBtn.disabled = true;
     progressEl.hidden = false;
     const t0 = performance.now();
     let ticks = 0;
-    statusEl.textContent = "Ждём ответ DeepSeek… 0.0с";
+    statusEl.textContent = "Генерирую квиз… 0.0с";
     const timer = setInterval(() => {
         ticks += 0.1;
-        statusEl.textContent = `Ждём ответ DeepSeek… ${ticks.toFixed(1)}с`;
+        statusEl.textContent = `Генерирую квиз… ${ticks.toFixed(1)}с`;
     }, 100);
+
     try {
-        const data = await fetcher();
+        const resp = await fetch(`${BACKEND_URL}/quiz`, { method: "POST", body: form });
+        if (!resp.ok) {
+            let detail = `HTTP ${resp.status}`;
+            try { detail = (await resp.json()).detail || detail; } catch (e) {}
+            throw new Error(detail);
+        }
+        const data = await resp.json();
         const ms = Math.round(performance.now() - t0);
         const m = data.meta || {};
         dbg(`← 200 OK за ${ms} мс`, "dbg-ok");
-        dbg(`meta: модель=${m.model || "?"}, источник=${m.source || "?"}, символов=${m.input_chars ?? "?"}` +
-            (m.chunks != null ? `, чанков=${m.chunks}` : "") +
-            `, сгенерировано=${m.generated ?? "?"}, время сервера=${m.elapsed_ms ?? "?"} мс`);
+        const conn = m.connectivity
+            ? (m.connectivity.ok ? "✓ все вопросы привязаны к чанкам" : `✗ битых ссылок: ${m.connectivity.bad.length}`)
+            : "—";
+        dbg(`meta: модель=${m.model}, источник=${m.source}, вопросов=${m.generated}` +
+            (m.words != null ? `, слов=${m.words}` : "") +
+            (m.input_chars != null ? `, символов=${m.input_chars}` : "") +
+            (m.connectivity ? `, связность=${conn}` : "") +
+            `, время сервера=${m.elapsed_ms} мс`);
         quiz = data.quiz || [];
         if (!quiz.length) throw new Error("Пустой квиз");
-        dbg(`Квиз готов: ${quiz.length} вопрос(ов). Запускаю.`, "dbg-ok");
         startQuiz();
     } catch (err) {
         const ms = Math.round(performance.now() - t0);
@@ -90,6 +122,7 @@ async function runGeneration(fetcher) {
     }
 }
 
+// --- Прохождение квиза ---
 function startQuiz() {
     current = 0;
     score = 0;
@@ -123,8 +156,7 @@ function renderQuestion() {
 }
 
 function answer(choice, card, q) {
-    const buttons = card.querySelectorAll(".opt-btn");
-    buttons.forEach((b, i) => {
+    card.querySelectorAll(".opt-btn").forEach((b, i) => {
         b.disabled = true;
         if (i === q.correct) b.classList.add("correct");
         else if (i === choice) b.classList.add("wrong");
@@ -179,12 +211,72 @@ function renderMath(el) {
     }
 }
 
-genBtn.addEventListener("click", generateFromText);
-fileInput.addEventListener("change", () => {
-    if (fileInput.files.length) generateFromFile(fileInput.files[0]);
-});
 restartBtn.addEventListener("click", () => {
     quizBlock.hidden = true;
     inputBlock.hidden = false;
-    fileInput.value = "";
+});
+
+// --- Экспорт в форматы Moodle ---
+function cdata(s) {
+    // Безопасный CDATA: разбиваем редкую последовательность ]]>
+    return "<![CDATA[" + String(s == null ? "" : s).split("]]>").join("]]]]><![CDATA[>") + "]]>";
+}
+
+function toMoodleXML(items) {
+    const parts = ['<?xml version="1.0" encoding="UTF-8"?>', "<quiz>"];
+    items.forEach((q, idx) => {
+        parts.push('  <question type="multichoice">');
+        parts.push(`    <name><text>Вопрос ${idx + 1}</text></name>`);
+        parts.push(`    <questiontext format="html"><text>${cdata(q.question)}</text></questiontext>`);
+        parts.push("    <single>true</single>");
+        parts.push("    <shuffleanswers>true</shuffleanswers>");
+        parts.push("    <answernumbering>abc</answernumbering>");
+        (q.options || []).forEach((opt, i) => {
+            const fraction = i === q.correct ? "100" : "0";
+            parts.push(`    <answer fraction="${fraction}" format="html"><text>${cdata(opt)}</text></answer>`);
+        });
+        if (q.explanation) {
+            parts.push(`    <generalfeedback format="html"><text>${cdata(q.explanation)}</text></generalfeedback>`);
+        }
+        parts.push("  </question>");
+    });
+    parts.push("</quiz>");
+    return parts.join("\n");
+}
+
+function giftEscape(s) {
+    return String(s == null ? "" : s).replace(/([~=#{}:\\])/g, "\\$1");
+}
+
+function toGIFT(items) {
+    return items.map((q, idx) => {
+        const lines = [`::Вопрос ${idx + 1}:: ${giftEscape(q.question)} {`];
+        (q.options || []).forEach((opt, i) => {
+            lines.push(`${i === q.correct ? "=" : "~"}${giftEscape(opt)}`);
+        });
+        if (q.explanation) lines.push(`#### ${giftEscape(q.explanation)}`);
+        lines.push("}");
+        return lines.join("\n");
+    }).join("\n\n") + "\n";
+}
+
+function download(filename, text, mime) {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+exportBtn.addEventListener("click", () => {
+    if (!quiz.length) return;
+    if (exportFormat.value === "gift") {
+        download("quiz.gift.txt", toGIFT(quiz), "text/plain;charset=utf-8");
+    } else {
+        download("quiz_moodle.xml", toMoodleXML(quiz), "application/xml;charset=utf-8");
+    }
 });

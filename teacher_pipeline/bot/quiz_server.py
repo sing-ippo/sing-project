@@ -1,13 +1,15 @@
 """Веб-API генератора квизов для преподавателей (без Telegram).
-Браузер шлёт текст или файл → DeepSeek генерит квиз → отдаём JSON + meta для дебага."""
+Один эндпоинт: браузер шлёт текст ИЛИ файл (+ необязательно страницы/тему) →
+DeepSeek генерит квиз → отдаём JSON + meta для дебага."""
 import os
 import time
 import tempfile
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import File, Form, HTTPException, UploadFile
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from pipeline import DEEPSEEK_MODEL, chunk_text, generate_quiz, load_document, process_document
+from pipeline import DEEPSEEK_MODEL, generate_quiz, process_document
 
 
 def parse_pages(spec: str) -> list:
@@ -28,6 +30,7 @@ def parse_pages(spec: str) -> list:
             pages.add(int(part))
     return sorted(p for p in pages if p >= 1) or None
 
+
 app = FastAPI(title="Teacher Quiz Server")
 app.add_middleware(
     CORSMiddleware,
@@ -43,107 +46,69 @@ def health() -> dict:
 
 
 @app.post("/quiz")
-async def quiz(text: str = Body(..., embed=True), num_questions: int = Body(5, embed=True)) -> dict:
-    if not text or not text.strip():
-        raise HTTPException(status_code=400, detail="Пустой текст")
-    num = max(1, min(int(num_questions), 10))
-
-    t0 = time.perf_counter()
-    result = generate_quiz(text, num)
-    elapsed_ms = int((time.perf_counter() - t0) * 1000)
-
-    if not result:
-        raise HTTPException(status_code=502, detail="DeepSeek не вернул квиз (проверьте ключ/баланс)")
-
-    return {
-        "quiz": result,
-        "meta": {
-            "model": DEEPSEEK_MODEL,
-            "source": "text",
-            "input_chars": len(text),
-            "requested": num,
-            "generated": len(result),
-            "elapsed_ms": elapsed_ms,
-        },
-    }
-
-
-@app.post("/quiz_file")
-async def quiz_file(file: UploadFile = File(...)) -> dict:
-    suffix = os.path.splitext(file.filename or "doc.txt")[1] or ".txt"
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await file.read())
-            tmp_path = tmp.name
-
-        t0 = time.perf_counter()
-        text = load_document(tmp_path)
-        if not text:
-            raise HTTPException(status_code=400, detail="Файл пустой, слишком большой (>50KB) или формат не поддержан")
-        chunks = chunk_text(text)
-        combined = "".join(f"[ID:{c['id']}]\n{c['text']}\n\n" for c in chunks)
-        result = generate_quiz(combined, 5)
-        elapsed_ms = int((time.perf_counter() - t0) * 1000)
-
-        if not result:
-            raise HTTPException(status_code=502, detail="DeepSeek не вернул квиз из файла")
-
-        return {
-            "quiz": result,
-            "meta": {
-                "model": DEEPSEEK_MODEL,
-                "source": "file",
-                "filename": file.filename,
-                "input_chars": len(text),
-                "chunks": len(chunks),
-                "generated": len(result),
-                "elapsed_ms": elapsed_ms,
-            },
-        }
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
-@app.post("/quiz_doc")
-async def quiz_doc(
-    file: UploadFile = File(...),
+async def quiz(
+    text: str = Form(""),
+    file: UploadFile = File(None),
     pages: str = Form(""),
     topic: str = Form(""),
     num_questions: int = Form(5),
 ) -> dict:
-    """Квиз по документу/учебнику: выбор страниц (PDF) и/или темы."""
+    """Единая точка генерации квиза. Если приложен файл — квиз по документу
+    (с учётом страниц/темы), иначе — по вставленному тексту."""
     num = max(1, min(int(num_questions), 10))
-    page_range = parse_pages(pages)
-    suffix = os.path.splitext(file.filename or "doc.txt")[1] or ".txt"
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await file.read())
-            tmp_path = tmp.name
+    topic_clean = topic.strip() or None
+    t0 = time.perf_counter()
 
-        t0 = time.perf_counter()
-        result = process_document(tmp_path, num_questions=num, page_range=page_range, topic=(topic.strip() or None))
+    # Режим «документ»
+    if file is not None and file.filename:
+        page_range = parse_pages(pages)
+        suffix = os.path.splitext(file.filename)[1] or ".txt"
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(await file.read())
+                tmp_path = tmp.name
+
+            result = process_document(tmp_path, num_questions=num, page_range=page_range, topic=topic_clean)
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+            if not result.get("quiz"):
+                raise HTTPException(status_code=502, detail="Не удалось сгенерировать квиз (пустой текст/страницы или ошибка DeepSeek)")
+
+            return {
+                "quiz": result["quiz"],
+                "meta": {
+                    "model": DEEPSEEK_MODEL,
+                    "source": "document",
+                    "filename": file.filename,
+                    "pages": pages or "все/авто",
+                    "topic": topic or "—",
+                    "words": result.get("words"),
+                    "generated": len(result["quiz"]),
+                    "connectivity": result.get("connectivity"),
+                    "elapsed_ms": elapsed_ms,
+                },
+            }
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    # Режим «текст»
+    if text and text.strip():
+        result = generate_quiz(text, num, topic_clean)
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
-
-        if not result.get("quiz"):
-            raise HTTPException(status_code=502, detail="Не удалось сгенерировать квиз (пустой текст/страницы или ошибка DeepSeek)")
-
+        if not result:
+            raise HTTPException(status_code=502, detail="DeepSeek не вернул квиз (проверьте ключ/баланс)")
         return {
-            "quiz": result["quiz"],
+            "quiz": result,
             "meta": {
                 "model": DEEPSEEK_MODEL,
-                "source": "document",
-                "filename": file.filename,
-                "pages": pages or "все/авто",
+                "source": "text",
                 "topic": topic or "—",
-                "words": result.get("words"),
-                "generated": len(result["quiz"]),
-                "connectivity": result.get("connectivity"),
+                "input_chars": len(text),
+                "generated": len(result),
                 "elapsed_ms": elapsed_ms,
             },
         }
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+
+    raise HTTPException(status_code=400, detail="Вставьте текст или выберите файл")

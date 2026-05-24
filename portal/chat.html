@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Чат с ассистентом МИРЭА</title>
+    <link rel="stylesheet" href="chat.css">
+</head>
+<body>
+    <header>
+        <a class="back" href="/portal/">← На главную</a>
+        <h1>Чат с ассистентом</h1>
+    </header>
+
+    <main>
+        <div id="messages"></div>
+        <form id="chat-form" autocomplete="off">
+            <input id="chat-input" type="text" placeholder="Напишите вопрос…" autofocus>
+            <button id="send-btn" type="submit">Отправить</button>
+        </form>
+    </main>
+
+    <script src="chat.js"></script>
+</body>
+</html>

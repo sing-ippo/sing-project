@@ -71,7 +71,7 @@ def _parse_results(html: str, top_n: int) -> list[dict]:
         href = link.get("href", "")
         url = href if href.startswith("http") else MIREA_BASE + href
         results.append({
-            "title": link.get_text(strip=True),
+            "title": link.get_text(" ", strip=True),
             "url": url,
             "snippet": preview.get_text(" ", strip=True) if preview else "",
         })
@@ -121,8 +121,15 @@ def _build_context(faq_candidates: list[dict], snippets: list[dict]) -> str:
     return "\n".join(parts)
 
 
-async def ask_deepseek(question: str, faq_candidates: list[dict], snippets: list[dict]) -> str | None:
-    """Просит DeepSeek сформулировать ответ из контекста. None — если нет ключа или ошибка."""
+async def ask_deepseek(
+    question: str,
+    faq_candidates: list[dict],
+    snippets: list[dict],
+    history: list[dict] | None = None,
+) -> str | None:
+    """Просит DeepSeek сформулировать ответ из контекста. None — если нет ключа или ошибка.
+    history — предыдущие ходы диалога [{role, content}] для разрешения кореференции
+    («про него», «а где это»); вставляется между системным промптом и текущим вопросом."""
     if not DEEPSEEK_API_KEY:
         return None
 
@@ -130,12 +137,12 @@ async def ask_deepseek(question: str, faq_candidates: list[dict], snippets: list
         f"Вопрос: {question}\n\n"
         f"{_build_context(faq_candidates, snippets)}"
     )
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages.extend(history or [])
+    messages.append({"role": "user", "content": user_message})
     payload = {
         "model": DEEPSEEK_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
+        "messages": messages,
         "temperature": 0.3,
         "stream": False,
     }
