@@ -81,5 +81,8 @@ main { max-width: 820px; margin: 0 auto; padding: 16px; }
     white-space: pre-wrap;
     word-break: break-word;
 }
+.f-edit-label { margin-top: 8px; font-size: 12px; color: #888; }
+textarea.f-latex { width: 100%; resize: vertical; }
+.f-render-bad { color: #c62828; }
 .f-meta { margin-top: 8px; font-size: 13px; color: #888; }
 .f-ctx { margin-top: 6px; font-size: 13px; color: #aaa; font-style: italic; }

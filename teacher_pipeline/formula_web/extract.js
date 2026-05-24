@@ -78,6 +78,8 @@ async function extract(file) {
     try {
         const form = new FormData();
         form.append("file", file, file.name);
+        const pagesEl = document.getElementById("pages-input");
+        form.append("pages", pagesEl ? pagesEl.value.trim() : "");
         const resp = await fetch(`${BACKEND_URL}/analyze`, { method: "POST", body: form });
         if (!resp.ok) {
             let detail = `HTTP ${resp.status}`;
@@ -134,9 +136,27 @@ function renderFormulas(formulas) {
             card.appendChild(desc);
         }
 
-        const latex = document.createElement("code");
+        // Редактируемый LaTeX: препод правит распознанное → превью обновляется,
+        // и исправление уходит в скачиваемый .docx (путь к 100% совпадению).
+        const editLabel = document.createElement("div");
+        editLabel.className = "f-edit-label";
+        editLabel.textContent = "LaTeX (можно править):";
+        card.appendChild(editLabel);
+
+        const latex = document.createElement("textarea");
         latex.className = "f-latex";
-        latex.textContent = f.latex;
+        latex.rows = 2;
+        latex.value = f.latex;
+        latex.addEventListener("input", () => {
+            f.latex = latex.value;          // f — ссылка на объект в lastFormulas → экспорт учтёт правку
+            try {
+                katex.render(latex.value, render, { throwOnError: false, displayMode: true });
+                render.classList.remove("f-render-bad");
+            } catch (e) {
+                render.textContent = latex.value;
+                render.classList.add("f-render-bad");
+            }
+        });
         card.appendChild(latex);
 
         const meta = document.createElement("div");

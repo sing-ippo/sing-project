@@ -15,6 +15,8 @@ from PIL import Image
 GOTENBERG_URL = os.getenv("GOTENBERG_URL", "http://gotenberg:3000")
 # Сколько страниц PDF максимум OCR-ить (pix2text тяжёлый на CPU) — защита от перегрева
 MAX_PAGES = int(os.getenv("MAX_PAGES", "12"))
+# Масштаб рендера страницы перед OCR: выше = точнее распознавание (но тяжелее). Лимит CPU страхует.
+FORMULA_ZOOM = float(os.getenv("FORMULA_ZOOM", "2.0"))
 
 
 class FormulaExtractionError(Exception):
@@ -145,7 +147,7 @@ def _clean_latex(text: str) -> str:
 def extract_formulas(
     pdf_path: str,
     pages: Optional[List[int]] = None,
-    zoom: float = 1.5,
+    zoom: float = FORMULA_ZOOM,
     resized_shape: int = 768,
     device: Optional[str] = None,
     mfr_batch_size: int = 1,
