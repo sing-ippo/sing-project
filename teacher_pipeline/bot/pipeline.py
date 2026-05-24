@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 from typing import Any, Dict, List
 
 import httpx
@@ -82,20 +83,55 @@ def load_document(path: str, page_range: List[int] = None) -> str:
 
     return text
 
-def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> List[Dict[str, Any]]:
+def _avg_word_len(text: str) -> int:
     words = text.split()
+    if not words:
+        return 6
+    return max(1, sum(len(w) + 1 for w in words) // len(words))
+
+
+def chunk_text(text: str, chunk_size_words: int = 400, overlap_words: int = 50) -> List[Dict[str, Any]]:
+    """Умная нарезка по границам абзацев/предложений (langchain RecursiveCharacterTextSplitter,
+    подход из студенческой реализации). Возвращает чанки с id/word_count/overlap_prev."""
+    try:
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+    except ImportError:
+        # fallback: наивная нарезка по словам
+        words = text.split()
+        chunks, cid, start = [], 1, 0
+        while start < len(words):
+            seg = " ".join(words[start:start + chunk_size_words])
+            chunks.append({"id": cid, "text": seg, "word_count": len(seg.split()), "overlap_prev": cid > 1})
+            start += chunk_size_words - overlap_words
+            cid += 1
+        return chunks
+
+    avg = _avg_word_len(text)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=avg * chunk_size_words,
+        chunk_overlap=avg * overlap_words,
+        separators=["\n\n", "\n", ".", " ", ""],
+    )
     chunks: List[Dict[str, Any]] = []
-    start = 0
-    chunk_id = 0
-
-    while start < len(words):
-        end = start + chunk_size
-        chunk_words = words[start:end]
-        chunks.append({"id": chunk_id, "text": " ".join(chunk_words)})
-        start += chunk_size - overlap
-        chunk_id += 1
-
+    for i, raw in enumerate(splitter.split_text(text), start=1):
+        clean = raw.replace("\n\n", " ").strip()
+        if not clean:
+            continue
+        chunks.append({
+            "id": i,
+            "text": clean,
+            "word_count": len(clean.split()),
+            "overlap_prev": i > 1,
+        })
     return chunks
+
+
+def verify_connectivity(quiz: List[Dict[str, Any]], chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Проверка связности (подход verify.py студентов): каждый source_chunk_id есть среди чанков."""
+    ids = {c["id"] for c in chunks}
+    bad = [q.get("source_chunk_id") for q in quiz
+           if q.get("source_chunk_id") is not None and q.get("source_chunk_id") not in ids]
+    return {"ok": len(bad) == 0, "bad": bad, "total": len(quiz)}
 
 def save_chunks(chunks: List[Dict[str, Any]], output_path: str) -> None:
     with open(output_path, "w", encoding="utf-8") as f:
@@ -145,6 +181,16 @@ def _extract_json_array(raw_text: str) -> List[Dict[str, Any]]:
         return data
     return []
 
+def _norm_chunk_id(value: Any) -> Any:
+    """source_chunk_id может прийти как '[ID:3]', '3' или 3 → приводим к int (или None)."""
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    m = re.search(r"\d+", str(value))
+    return int(m.group()) if m else None
+
+
 def _normalize_quiz(quiz: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
 
@@ -158,7 +204,7 @@ def _normalize_quiz(quiz: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "options": item.get("options", []),
             "correct": item.get("correct", 0),
             "explanation": item.get("explanation", ""),
-            "source_chunk_id": item.get("source_chunk_id", None),
+            "source_chunk_id": _norm_chunk_id(item.get("source_chunk_id")),
         })
 
     return normalized
@@ -260,8 +306,9 @@ def process_document(file_path: str, num_questions: int = 5, page_range: List[in
 
     print("-> Документ прочитан. Генерирую вопросы...")
     quiz = generate_quiz(combined_text, num_questions, topic=topic)
+    connectivity = verify_connectivity(quiz, chunks)
 
-    return {"chunks": chunks, "quiz": quiz, "words": len(text.split())}
+    return {"chunks": chunks, "quiz": quiz, "words": len(text.split()), "connectivity": connectivity}
 
 def main():
     parser = argparse.ArgumentParser()

@@ -6,3 +6,4 @@ python-docx
 fastapi
 uvicorn
 python-multipart
+langchain-text-splitters

@@ -140,6 +140,7 @@ async def quiz_doc(
                 "topic": topic or "—",
                 "words": result.get("words"),
                 "generated": len(result["quiz"]),
+                "connectivity": result.get("connectivity"),
                 "elapsed_ms": elapsed_ms,
             },
         }

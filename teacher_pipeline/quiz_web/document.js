@@ -81,7 +81,8 @@ async function generate() {
         const ms = Math.round(performance.now() - t0);
         const m = data.meta || {};
         dbg(`← 200 OK за ${ms} мс`, "dbg-ok");
-        dbg(`meta: страниц=${m.pages}, слов=${m.words ?? "?"}, тема=${m.topic}, вопросов=${m.generated}, время сервера=${m.elapsed_ms} мс`);
+        const conn = m.connectivity ? (m.connectivity.ok ? "✓ все вопросы привязаны к чанкам" : `✗ битых ссылок: ${m.connectivity.bad.length}`) : "—";
+        dbg(`meta: страниц=${m.pages}, слов=${m.words ?? "?"}, тема=${m.topic}, вопросов=${m.generated}, связность=${conn}, время сервера=${m.elapsed_ms} мс`);
         quiz = data.quiz || [];
         if (!quiz.length) throw new Error("Пустой квиз");
         startQuiz();
