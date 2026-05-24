@@ -76,8 +76,10 @@ def name_formulas(formulas: List[Dict[str, Any]], source_title: str = "") -> Lis
         n = by_id.get(f["formula_id"], {})
         f["name"] = (n.get("name") or "").strip()
         f["description"] = (n.get("description") or "").strip()
+        # LaTeX из lossless-источников (regex/pandoc) = точная копия файла — НЕ даём LLM его менять.
+        # Исправляем только распознанное OCR (pix2text), где возможны ошибки.
         fixed = (n.get("latex") or "").strip()
-        if fixed:
+        if fixed and f.get("method") == "pix2text":
             f["latex"] = fixed
     return formulas
 
