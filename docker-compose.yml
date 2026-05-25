@@ -1,21 +1,55 @@
 services:
+  # Тяжёлый чат+голос (семантика e5 + Whisper/Silero). Профиль full, сервер ≥4 ГБ.
   voice_server:
-    build: ./student_assistant/bot
+    build:
+      context: ./student_assistant/bot
+      args:
+        VARIANT: full
+    profiles: ["full"]
     command: uvicorn voice_server:app --host 0.0.0.0 --port 8000
     ports:
       - "8010:8000"
     environment:
+      - RAG_MODE=semantic
+      - ENABLE_VOICE=true
       - WHISPER_MODEL=${WHISPER_MODEL:-medium}
+      - FAQ_PATH=/app/faq.json
+      - CORPUS_PATH=/app/corpus.npz
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
+      - RAG_MIN_SCORE=${RAG_MIN_SCORE:-0.85}
+      - VIDEO_MIN_SCORE=${VIDEO_MIN_SCORE:-0.86}
+      - REQUESTS_LOG=/data/requests.jsonl
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
+    volumes:
+      # Кэш моделей Whisper/Silero/эмбеддингов — чтобы не качать при каждом рестарте
+      - model-cache:/root/.cache
+      # Логи запросов наружу — их грузит дашборд аналитики
+      - ./logs:/data
+      # Единый FAQ (выход пайплайна) — правки без пересборки образа
+      - ./student_assistant/data/faq.json:/app/faq.json:ro
+      # Семантический индекс RAG (выход build_corpus.py)
+      - ./student_assistant/data/corpus.npz:/app/corpus.npz:ro
+
+  # Лёгкий чат (keyword-FAQ + DeepSeek, без torch и голоса). Профиль light, влезает на 1 ГБ.
+  chat_light:
+    build:
+      context: ./student_assistant/bot
+      args:
+        VARIANT: light
+    profiles: ["light"]
+    command: uvicorn voice_server:app --host 0.0.0.0 --port 8000 --workers 1
+    ports:
+      - "8010:8000"
+    environment:
+      - RAG_MODE=keyword
+      - ENABLE_VOICE=false
       - FAQ_PATH=/app/faq.json
       - REQUESTS_LOG=/data/requests.jsonl
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
     volumes:
-      # Кэш моделей Whisper и Silero — чтобы не качать при каждом рестарте
-      - model-cache:/root/.cache
-      # Логи запросов наружу — их грузит дашборд аналитики
       - ./logs:/data
-      # Единый FAQ (выход пайплайна) — правки без пересборки образа
       - ./student_assistant/data/faq.json:/app/faq.json:ro
 
   # Telegram-бот студента. Нужен BOT_TOKEN в .env — иначе сервис не стартует.
@@ -56,17 +90,22 @@ services:
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      - GOTENBERG_URL=http://gotenberg:3000
+    # gotenberg нужен только для PDF-экспорта; без него DOCX работает, PDF → 502.
+    # Жёсткий depends_on не ставим, чтобы quiz_server поднимался и на лёгком боксе.
 
-  # Конвертер офисных документов в PDF (LibreOffice+Chromium внутри) — для извлечения формул
+  # Конвертер офисных документов в PDF (LibreOffice+Chromium внутри). Тяжёлый — только full.
   gotenberg:
     image: gotenberg/gotenberg:8
+    profiles: ["full"]
     command:
       - gotenberg
       - --api-timeout=180s
 
-  # Сервис извлечения/рендера формул (pix2text + pandoc). Тяжёлый (~2GB моделей).
+  # Сервис извлечения/рендера формул (pix2text + pandoc). Тяжёлый (~2GB моделей). Только full.
   formulas:
     build: ./formulas
+    profiles: ["full"]
     command: uvicorn formulas_api.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8001:8000"
@@ -84,11 +123,25 @@ services:
     volumes:
       - model-cache:/root/.cache
 
+  # Авторизация: подписанный cookie + проверка для nginx auth_request. Без БД.
+  auth:
+    build: ./auth
+    environment:
+      - AUTH_USERS=${AUTH_USERS:-admin:mirea}
+      - SESSION_SECRET=${SESSION_SECRET:-change-me-please}
+      - SESSION_TTL=${SESSION_TTL:-43200}
+
   web:
     image: nginx:alpine
     ports:
       - "3001:80"
+    depends_on:
+      - auth
     volumes:
+      # Страница входа (открыта): http://localhost:3001/login/
+      - ./auth/web:/usr/share/nginx/html/login:ro
+      # Общая дизайн-система (theme.css + app-header) для всех страниц: /shared/
+      - ./shared:/usr/share/nginx/html/shared:ro
       # Единый портал (главная + текстовый чат): http://localhost:3001/ → /portal/
       - ./portal:/usr/share/nginx/html/portal:ro
       # Редирект корня на портал

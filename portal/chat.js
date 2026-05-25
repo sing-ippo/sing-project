@@ -32,14 +32,50 @@ function escapeHtml(s) {
 // pk@mirea.ru бережём проверкой символа перед совпадением в колбэке.
 const LINK_RE = /(https?:\/\/[^\s<]+)|((?:[a-zA-Z0-9-]+\.)+(?:ru|рф|com|org|edu)(?:\/[^\s<]*)?)/g;
 
-function linkify(text) {
-    return escapeHtml(text).replace(LINK_RE, (m, full, bare, offset, str) => {
-        if (full) return `<a href="${full}" target="_blank" rel="noopener">${full}</a>`;
-        // голый домен: пропускаем, если это часть email/уже-домена (перед ним @ . или буква/цифра)
-        const prev = offset > 0 ? str[offset - 1] : "";
-        if (/[@\w.]/.test(prev)) return m;
-        return `<a href="https://${bare}" target="_blank" rel="noopener">${bare}</a>`;
+// Рендер ответа бота как Markdown (жирный/списки/ссылки) + санитизация (XSS-safe).
+// Формулы LaTeX защищаем от markdown плейсхолдерами; голые домены → кликабельные ссылки.
+function renderMarkdown(text) {
+    let src = String(text == null ? "" : text);
+
+    // 1) Защитить математику ($$…$$, $…$, \[…\], \(…\)) — иначе markdown ломает _ и * в LaTeX.
+    const math = [];
+    src = src.replace(/\$\$[\s\S]+?\$\$|\$[^\n$]+?\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)/g, (m) => {
+        math.push(m);
+        return `@@MATH${math.length - 1}@@`;
     });
+
+    // 2) Голые домены → полные URL (marked сделает кликабельными).
+    src = src.replace(LINK_RE, (m, full, bare, offset, str) => {
+        if (full) return full;
+        const prev = offset > 0 ? str[offset - 1] : "";
+        if (/[@\w./]/.test(prev)) return m; // часть email/пути — не трогаем
+        return "https://" + bare;
+    });
+
+    let html = window.marked ? window.marked.parse(src, { breaks: true, gfm: true }) : escapeHtml(src);
+    if (window.DOMPurify) html = window.DOMPurify.sanitize(html);
+
+    // 3) Вернуть LaTeX (экранируя HTML-символы) — KaTeX отрендерит его позже из текстовых узлов.
+    html = html.replace(/@@MATH(\d+)@@/g, (m, i) => escapeHtml(math[Number(i)]));
+    return html;
+}
+
+// Рендер формул KaTeX в элементе (как на странице извлечения формул). Битый LaTeX не валит страницу.
+function renderMath(el) {
+    if (!window.renderMathInElement) return;
+    try {
+        window.renderMathInElement(el, {
+            delimiters: [
+                { left: "$$", right: "$$", display: true },
+                { left: "\\[", right: "\\]", display: true },
+                { left: "$", right: "$", display: false },
+                { left: "\\(", right: "\\)", display: false },
+            ],
+            throwOnError: false,
+        });
+    } catch (e) {
+        console.error("KaTeX:", e);
+    }
 }
 
 function addMessage(text, cls, asHtml) {
@@ -114,6 +150,25 @@ function addSources(list) {
     scrollDown();
 }
 
+// Видео-плеер RuTube — только для доверённого домена (iframe строим сами, не через markdown).
+function addVideo(video) {
+    if (!video || !video.embed_url || !video.embed_url.startsWith("https://rutube.ru/")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "video-card";
+    const title = document.createElement("div");
+    title.className = "video-title";
+    title.textContent = "🎬 " + (video.title || "Видео РТУ МИРЭА");
+    const frame = document.createElement("iframe");
+    frame.src = video.embed_url;
+    frame.loading = "lazy";
+    frame.allow = "clipboard-write; autoplay; fullscreen";
+    frame.allowFullscreen = true;
+    wrap.appendChild(title);
+    wrap.appendChild(frame);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
 function addFeedback(requestId) {
     const wrap = document.createElement("div");
     wrap.className = "fb";
@@ -167,7 +222,10 @@ formEl.addEventListener("submit", async (e) => {
 
         status.stop();
         const answer = data.answer || "";
-        addMessage(linkify(answer), "bot", true);
+        const botEl = addMessage(renderMarkdown(answer), "bot", true);
+        botEl.querySelectorAll("a").forEach((a) => { a.target = "_blank"; a.rel = "noopener"; });
+        renderMath(botEl);
+        addVideo(data.video);
         addSources(data.sources);
         if (data.request_id) addFeedback(data.request_id);
 

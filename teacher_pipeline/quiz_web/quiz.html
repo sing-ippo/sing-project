@@ -4,18 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Генератор квизов — РТУ МИРЭА</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/shared/theme.css">
     <link rel="stylesheet" href="vendor/katex/katex.min.css">
     <link rel="stylesheet" href="quiz.css">
+    <script defer src="/shared/layout.js"></script>
     <script defer src="vendor/katex/katex.min.js"></script>
     <script defer src="vendor/katex/contrib/auto-render.min.js"></script>
 </head>
 <body>
-    <a href="/portal/" class="home-link">← В меню</a>
-
-    <header>
-        <h1>Генератор квизов</h1>
-        <p class="sub">Текст или документ → готовый тест с проверкой</p>
-    </header>
+    <app-header title="Генератор квизов" subtitle="Текст или документ → готовый тест с проверкой" badge="📝"></app-header>
 
     <main>
         <section id="input-block" class="card">
@@ -58,19 +57,22 @@
                 <div id="status"></div>
             </div>
 
-            <details id="debug-box">
+            <details id="debug-box" class="debug-box">
                 <summary>Подробности</summary>
-                <pre id="debug-log"></pre>
+                <pre id="debug-log" class="debug-log"></pre>
             </details>
         </section>
 
         <section id="quiz-block" class="card" hidden>
             <div id="quiz-toolbar">
                 <select id="export-format">
+                    <option value="pdf">PDF (печать)</option>
+                    <option value="docx">Word (печать)</option>
                     <option value="xml">Moodle XML</option>
                     <option value="gift">GIFT</option>
                 </select>
-                <button id="export-btn" type="button">⬇ Скачать для Moodle</button>
+                <label class="answers-toggle"><input type="checkbox" id="export-answers"> с ключом ответов</label>
+                <button id="export-btn" type="button">⬇ Скачать</button>
             </div>
             <div id="question-area"></div>
             <div id="result-area" hidden></div>

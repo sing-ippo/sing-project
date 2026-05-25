@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Вход — Ассистент РТУ МИРЭА</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/shared/theme.css">
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="login-wrap">
+        <form id="login-form" class="login-card">
+            <div class="login-badge">🎓</div>
+            <h1>Цифровой ассистент РТУ МИРЭА</h1>
+            <p class="login-sub">Войдите, чтобы продолжить</p>
+            <input id="username" placeholder="Логин" autocomplete="username" autofocus required>
+            <input id="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+            <button type="submit" class="btn btn-primary" id="login-btn">Войти</button>
+            <div id="login-err" class="login-err"></div>
+        </form>
+    </div>
+    <script src="login.js"></script>
+</body>
+</html>

@@ -1,3 +1,5 @@
+from __future__ import annotations  # отложенные аннотации: torch.Tensor в сигнатурах не вычисляется при импорте (нужно для light-образа без torch)
+
 import base64
 import io
 import json
@@ -10,9 +12,6 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import scipy.io.wavfile as wavfile
-import torch
-import whisper
 from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,9 +21,19 @@ from search_engine import (
     search,
     split_words,
 )
-from web_fallback import DEEPSEEK_API_KEY, _STOPWORDS, ask_deepseek, search_mirea
+from web_fallback import DEEPSEEK_API_KEY, apply_aliases, ask_deepseek, build_search_query
 
 from pymorphy3 import MorphAnalyzer
+
+# Режимы развёртывания (лёгкий keyword без torch / тяжёлый semantic + голос).
+RAG_MODE = os.getenv("RAG_MODE", "semantic").lower()           # "keyword" | "semantic"
+ENABLE_VOICE = os.getenv("ENABLE_VOICE", "true").lower() == "true"
+
+# Тяжёлые ML-зависимости тянем ТОЛЬКО для голоса (их нет в лёгком образе).
+if ENABLE_VOICE:
+    import scipy.io.wavfile as wavfile
+    import torch
+    import whisper
 
 _morph = MorphAnalyzer()
 _word_re = re.compile(r"[а-яёa-z0-9]+", re.IGNORECASE)
@@ -40,6 +49,12 @@ BASE_DIR = Path(__file__).resolve().parent
 # Единый источник FAQ — выход пайплайна data/faq.json (можно переопределить env FAQ_PATH)
 FAQ_PATH = Path(os.getenv("FAQ_PATH", str(BASE_DIR.parent / "data" / "faq.json")))
 REQUESTS_LOG = Path(os.getenv("REQUESTS_LOG", str(BASE_DIR / "requests.jsonl")))
+
+CORPUS_PATH = Path(os.getenv("CORPUS_PATH", str(BASE_DIR.parent / "data" / "corpus.npz")))
+RAG_MIN_SCORE = float(os.getenv("RAG_MIN_SCORE", "0.85"))
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "12"))
+# Видео интрузивнее текста — показываем только при более уверенном совпадении
+VIDEO_MIN_SCORE = float(os.getenv("VIDEO_MIN_SCORE", "0.86"))
 
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "small")
 TTS_LANGUAGE = "ru"
@@ -60,6 +75,7 @@ app.add_middleware(
 whisper_model = None
 tts_model = None
 faq_data = None
+corpus = None  # семантический индекс (rag.Corpus) — None при недоступности (деградация на keyword)
 
 
 def webm_to_wav(input_path: str) -> str:
@@ -87,14 +103,21 @@ def tensor_to_wav_bytes(audio_tensor: torch.Tensor, sample_rate: int = TTS_SAMPL
 
 
 _DOMAIN_RE = re.compile(r"[a-zA-Z0-9]+(?:[.\-][a-zA-Z0-9]+)+")
+# Эмодзи и пиктограммы — вырезаем только при озвучке (в тексте чата остаются)
+_EMOJI_RE = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
+    "\U00002190-\U000021FF\U00002B00-\U00002BFF\U0000FE00-\U0000FE0F\U00002022]+"
+)
 
 
 def make_speakable(text: str) -> str:
-    """Готовит текст к озвучке: в доменах/ссылках «.» → « точка », «-» → « дефис ».
-    Применяется ТОЛЬКО к синтезу речи; на экран идёт исходный текст с чистым URL."""
+    """Готовит текст к озвучке: в доменах/ссылках «.» → « точка », «-» → « дефис »,
+    эмодзи убираем. Применяется ТОЛЬКО к синтезу речи; на экран идёт исходный текст."""
     def repl(match: re.Match) -> str:
         return match.group(0).replace(".", " точка ").replace("-", " дефис ")
-    return _DOMAIN_RE.sub(repl, text)
+    spoken = _DOMAIN_RE.sub(repl, text)
+    spoken = _EMOJI_RE.sub("", spoken)
+    return re.sub(r"\s{2,}", " ", spoken).strip()
 
 
 def synthesize_answer(answer: str) -> bytes:
@@ -177,29 +200,46 @@ def set_feedback(request_id: str, helpful: bool) -> bool:
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    global whisper_model, tts_model, faq_data
+    global whisper_model, tts_model, faq_data, corpus
 
     if not FAQ_PATH.exists():
         raise RuntimeError(f"Файл FAQ не найден: {FAQ_PATH}")
 
     faq_data = load_faq_from_file(FAQ_PATH)
-    whisper_model = whisper.load_model(WHISPER_MODEL_NAME)
 
-    # Обход бага torch.hub: _validate_not_a_forked_repo падает с
-    # KeyError: 'Authorization', когда не задан GITHUB_TOKEN.
-    if hasattr(torch.hub, "_validate_not_a_forked_repo"):
-        torch.hub._validate_not_a_forked_repo = lambda *args, **kwargs: True
+    # Семантический индекс (RAG) — только в тяжёлом режиме. В keyword torch не трогаем.
+    if RAG_MODE == "semantic":
+        try:
+            import rag
+            if CORPUS_PATH.exists():
+                rag.get_model()  # прогреть эмбеддинг-модель (кэш HF в volume)
+                corpus = rag.Corpus.load(str(CORPUS_PATH))
+                print(f"RAG: индекс загружен ({len(corpus)} фрагментов), модель {rag.EMBEDDING_MODEL}")
+            else:
+                print(f"RAG: индекс {CORPUS_PATH} не найден — деградация на keyword-FAQ")
+        except Exception as error:
+            corpus = None
+            print(f"RAG: не загрузился ({error}) — деградация на keyword-FAQ")
+    else:
+        print("RAG: режим keyword — семантика и torch не загружаются")
 
-    tts_model, _ = torch.hub.load(
-        repo_or_dir="snakers4/silero-models",
-        model="silero_tts",
-        language=TTS_LANGUAGE,
-        speaker=TTS_SPEAKER_MODEL,
-        trust_repo=True,  # без этого torch.hub просит подтверждение через input() → EOFError в контейнере
-    )
-
-    if hasattr(tts_model, "to"):
-        tts_model.to("cpu")
+    # Голосовые модели (Whisper STT + Silero TTS) — только если включён голос.
+    if ENABLE_VOICE:
+        whisper_model = whisper.load_model(WHISPER_MODEL_NAME)
+        # Обход бага torch.hub: _validate_not_a_forked_repo падает с KeyError 'Authorization'.
+        if hasattr(torch.hub, "_validate_not_a_forked_repo"):
+            torch.hub._validate_not_a_forked_repo = lambda *args, **kwargs: True
+        tts_model, _ = torch.hub.load(
+            repo_or_dir="snakers4/silero-models",
+            model="silero_tts",
+            language=TTS_LANGUAGE,
+            speaker=TTS_SPEAKER_MODEL,
+            trust_repo=True,  # иначе torch.hub просит подтверждение через input() → EOFError
+        )
+        if hasattr(tts_model, "to"):
+            tts_model.to("cpu")
+    else:
+        print("VOICE: голос отключён (ENABLE_VOICE=false)")
 
 
 # URL: полные ссылки или «голые» домены. Lookbehind (?<![@\w.]) бережёт email (pk@mirea.ru).
@@ -211,8 +251,6 @@ _URL_RE = re.compile(
 _JUNK_PATHS = ("/news/", "/press", "/announc", "/search")
 # Голый корень главного сайта — не «полезная ссылка» (а вот online-edu.mirea.ru и т.п. — да)
 _GENERIC_URLS = {"mirea.ru", "www.mirea.ru"}
-# Леммы названия вуза/общих слов — они есть на каждой странице, по ним нельзя судить о релевантности
-_GENERIC_TERMS = {"мирэа", "ртэ", "мирэ", "университет", "вуз", "mirea", "rtu"}
 
 
 def _extract_urls(text: str) -> list[str]:
@@ -227,82 +265,124 @@ def _extract_urls(text: str) -> list[str]:
 
 
 def _norm_url(url: str) -> str:
-    """Ключ для дедупа: без схемы, без хвостового слэша, в нижнем регистре."""
-    return re.sub(r"^https?://", "", url.lower()).rstrip("/")
+    """Ключ для дедупа: без схемы и www., без хвостового слэша, в нижнем регистре."""
+    return re.sub(r"^https?://(www\.)?", "", url.lower()).rstrip("/")
 
 
-def build_sources(lemmatized: str, faq_candidates: list[dict], snippets: list[dict]) -> list[dict]:
-    """«Полезные ссылки»: сперва канон из совпавших FAQ-ответов, иначе —
-    строго отфильтрованный веб (без новостей, с совпадением слов). Пусто — если нечего показать."""
-    sources: list[dict] = []
+def build_sources(hits: list[dict]) -> list[dict]:
+    """«Полезные ссылки» из семантических хитов (релевантность уже отобрана по score).
+    FAQ-хиты с URL — в приоритет; дубли, голый корень и новостной мусор — мимо. Cap 3."""
+    out: list[dict] = []
     seen: set[str] = set()
-
-    # 1) Канон из FAQ — только для кандидатов, реально совпавших с вопросом
-    for cand in faq_candidates[:3]:
-        entry = next((e for e in faq_data if e.get("id") == cand.get("id")), None)
-        if not (entry and has_exact_word_match(lemmatized, entry)):
-            continue
-        # первый «полезный» URL ответа (не голый корень mirea.ru, не дубль)
-        url = next((u for u in _extract_urls(cand.get("answer", ""))
-                    if _norm_url(u) not in _GENERIC_URLS and _norm_url(u) not in seen), None)
+    for h in sorted(hits, key=lambda x: 0 if x.get("tag") == "faq" else 1):
+        url = h.get("url", "")
         if not url:
             continue
-        seen.add(_norm_url(url))
-        answer_text = cand.get("answer", "")
-        sources.append({
-            "title": cand.get("question", ""),
-            "url": url,
-            "snippet": answer_text[:130] + ("…" if len(answer_text) > 130 else ""),
-        })
-        if len(sources) >= 3:
-            return sources
-
-    if sources:
-        return sources
-
-    # 2) Фолбэк — отфильтрованный поиск mirea.ru (только если из базы ничего не вышло).
-    # Совпадение считаем по СОДЕРЖАТЕЛЬНЫМ словам: название вуза («мирэа») есть везде,
-    # по нему судить о релевантности нельзя.
-    content_lemmas = {
-        t for t in lemmatized.split()
-        if len(t) >= 3 and t not in _GENERIC_TERMS and t not in _STOPWORDS
-    }
-    if not content_lemmas:
-        return sources
-    # Сколько содержательных слов вопроса должно встретиться в сниппете. Если в вопросе
-    # 2+ значимых слова — требуем хотя бы два: одно случайное совпадение (полисемия,
-    # напр. «канал» связи в диссертации) не делает ссылку релевантной.
-    need = 2 if len(content_lemmas) >= 2 else 1
-    for s in snippets:
-        url = s.get("url", "")
-        if any(p in url.lower() for p in _JUNK_PATHS):
-            continue
-        text_lemmas = set(lemmatize(f"{s.get('title', '')} {s.get('snippet', '')}").split())
-        if len(content_lemmas & text_lemmas) < need:
-            continue
         key = _norm_url(url)
-        if not url or key in seen or key in _GENERIC_URLS:
+        if key in seen or key in _GENERIC_URLS or any(p in url.lower() for p in _JUNK_PATHS):
             continue
         seen.add(key)
-        sources.append({"title": s.get("title", ""), "url": url, "snippet": s.get("snippet", "")})
-        if len(sources) >= 3:
+        text = h.get("text", "")
+        out.append({
+            "title": h.get("title", ""),
+            "url": url,
+            "snippet": text[:140] + ("…" if len(text) > 140 else ""),
+        })
+        if len(out) >= 3:
             break
-    return sources
+    return out
+
+
+def _hits_from_faq(lemmatized: str, faq_candidates: list[dict]) -> list[dict]:
+    """Откат, когда семантика недоступна/пуста: keyword-кандидаты FAQ → hits,
+    но только реально совпавшие (гейт точного слова) — чтобы не тянуть слабые совпадения."""
+    hits: list[dict] = []
+    for c in faq_candidates:
+        entry = next((e for e in faq_data if e.get("id") == c.get("id")), None)
+        if not (entry and has_exact_word_match(lemmatized, entry)):
+            continue
+        ans = c.get("answer", "")
+        url = next((u for u in _extract_urls(ans) if _norm_url(u) not in _GENERIC_URLS), "")
+        hits.append({
+            "tag": "faq",
+            "title": c.get("question", ""),
+            "url": url,
+            "text": f"{c.get('question', '')}\n{ans}",
+        })
+    return hits
+
+
+def retrieve(query: str, lemmatized: str, faq_candidates: list[dict]) -> list[dict]:
+    """Семантический поиск по индексу (query — уже переписанный запрос); если индекса нет
+    или ничего не прошло порог — откат на выверенную keyword-базу FAQ (с гейтом точного слова)."""
+    hits: list[dict] = []
+    if corpus is not None:
+        try:
+            import rag
+            hits = corpus.search(rag.embed_query(query), top_k=RAG_TOP_K, min_score=RAG_MIN_SCORE)
+        except Exception as error:
+            print(f"RAG: ошибка поиска ({error})")
+            hits = []
+    if not hits:
+        hits = _hits_from_faq(lemmatized, faq_candidates)
+    return hits
+
+
+# Болтовня/социальное: отвечаем сразу, без поиска по базе (быстрее + по-человечески).
+_SMALLTALK_RE = re.compile(
+    r"^(привет|здравствуй(те)?|добрый (день|вечер|утро)|доброе утро|хай|здаров|здорово|ку|"
+    r"спасибо|благодар|пожалуйста|пока|до свидания|как дела|как ты|кто ты|что ты умеешь|"
+    r"чем ты|меня зовут|как меня зовут|как тебя зовут)\b",
+    re.IGNORECASE,
+)
+# Если есть предметный намёк о вузе — это уже не болтовня, идём в поиск.
+_TOPIC_HINT = re.compile(
+    r"расписан|стипенд|повыш|общеж|общаг|поступ|сдо|экзамен|зач[её]т|документ|справк|перевод|"
+    r"пересдач|деканат|при[ёе]мн|курс|сесси|каникул|диплом|оценк|преподав|кафедр|институт",
+    re.IGNORECASE,
+)
+
+
+def _is_smalltalk(text: str) -> bool:
+    """Консервативно: короткая реплика, начинается с социального оборота и без предметных слов."""
+    t = (text or "").strip()
+    if not t or len(t.split()) > 6 or _TOPIC_HINT.search(t):
+        return False
+    return bool(_SMALLTALK_RE.match(t))
 
 
 async def answer_question(question: str, history: list[dict] | None = None) -> dict:
-    """Единый движок ответа: релевантные FAQ + сниппеты mirea.ru → DeepSeek.
-    При недоступности LLM — деградация на чистый FAQ с гейтом точного совпадения.
-    history — прошлые ходы диалога [{role, content}] для кореференции (только для генерации;
-    ретрив идёт по текущему вопросу). Возвращает {answer, source, sources}; STT/TTS — см. /ask."""
+    """Единый движок ответа: семантический поиск (FAQ + официальные страницы) → DeepSeek.
+    При недоступности LLM — деградация на keyword-FAQ с гейтом точного совпадения.
+    history — прошлые ходы диалога [{role, content}] для кореференции (ретрив — по текущему вопросу).
+    Возвращает {answer, source, sources}; STT/TTS — см. /ask."""
+    # Болтовня/приветствие/личное — отвечаем сразу из диалога, без поиска и rewrite.
+    if DEEPSEEK_API_KEY and _is_smalltalk(question):
+        reply = await ask_deepseek(question, [], history=history)
+        if reply:
+            return {"answer": reply, "source": "smalltalk", "sources": [], "video": None}
+
     lemmatized = lemmatize(question)
     faq_candidates = await search(lemmatized, faq_data, top_n=5)
-    snippets = await search_mirea(question)
+    # Поиск идёт по переписанному запросу (раскрытый сленг + кореференция),
+    # генерация ниже — по оригинальному вопросу.
+    search_q = await build_search_query(question, history)
+    hits = retrieve(search_q, lemmatized, faq_candidates)
+
+    # Видео — отдельным полем (плеер), в текстовый контекст и ссылки не идёт.
+    # Среди релевантных (прошедших порог) предпочитаем КОРОТКИЕ ролики.
+    video_hits = sorted(
+        [h for h in hits if h.get("tag") == "video" and h.get("score", 0) >= VIDEO_MIN_SCORE],
+        key=lambda h: h.get("duration") or 10**9,
+    )
+    text_hits = [h for h in hits if h.get("tag") != "video"]
 
     answer = None
     source = "none"
     if DEEPSEEK_API_KEY:
-        answer = await ask_deepseek(question, faq_candidates, snippets, history=history)
+        # В генерацию отдаём вопрос с раскрытым сленгом (доды → дни открытых дверей),
+        # чтобы модель понимала термин; rewrite остаётся только для поиска.
+        answer = await ask_deepseek(apply_aliases(question), text_hits, history=history)
         if answer:
             source = "deepseek"
 
@@ -315,8 +395,12 @@ async def answer_question(question: str, history: list[dict] | None = None) -> d
         if not answer:
             answer = DEFAULT_FALLBACK_ANSWER
 
-    sources = build_sources(lemmatized, faq_candidates, snippets)
-    return {"answer": answer, "source": source, "sources": sources}
+    sources = build_sources(text_hits)
+    video = None
+    if video_hits and video_hits[0].get("score", 0) >= VIDEO_MIN_SCORE:
+        v = video_hits[0]
+        video = {"title": v.get("title", ""), "embed_url": v.get("url", "")}
+    return {"answer": answer, "source": source, "sources": sources, "video": video}
 
 
 @app.get("/health")
@@ -326,6 +410,8 @@ async def health() -> dict:
 
 @app.post("/ask")
 async def ask(file: UploadFile = File(...)) -> dict:
+    if not ENABLE_VOICE:
+        raise HTTPException(status_code=503, detail="Голосовой режим отключён в этой сборке")
     allowed_content_types = {
         "audio/wav",
         "audio/x-wav",
@@ -380,6 +466,7 @@ async def ask(file: UploadFile = File(...)) -> dict:
             "question": question,
             "answer": answer,
             "audio_base64": audio_base64,
+            "video": result.get("video"),
         }
 
     except subprocess.CalledProcessError as error:
@@ -437,6 +524,7 @@ async def ask_text(question: str = Body(..., embed=True), history: list = Body(d
         "answer": answer,
         "source": source,
         "sources": result.get("sources", []),
+        "video": result.get("video"),
     }
 
 

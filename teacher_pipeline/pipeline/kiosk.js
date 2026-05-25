@@ -7,6 +7,7 @@ const answerEl = document.getElementById("answer");
 const feedbackEl = document.getElementById("feedback");
 const fbYesBtn = document.getElementById("fb-yes");
 const fbNoBtn = document.getElementById("fb-no");
+const videoEl = document.getElementById("video");
 
 let mediaStream = null;
 let mediaRecorder = null;
@@ -40,6 +41,7 @@ async function startRecording() {
         answerEl.textContent = "";
         questionEl.textContent = "Слушаю…";
         feedbackEl.hidden = true;
+        if (videoEl) videoEl.innerHTML = "";
     } catch (err) {
         answerEl.textContent = "Нет доступа к микрофону. Разрешите доступ и попробуйте снова.";
         console.error(err);
@@ -86,6 +88,23 @@ async function sendAudio() {
     }
 }
 
+// Видео-плеер RuTube — только для доверённого домена.
+function renderVideo(video) {
+    if (!videoEl) return;
+    videoEl.innerHTML = "";
+    if (!video || !video.embed_url || !video.embed_url.startsWith("https://rutube.ru/")) return;
+    const title = document.createElement("div");
+    title.className = "video-title";
+    title.textContent = "🎬 " + (video.title || "Видео РТУ МИРЭА");
+    const frame = document.createElement("iframe");
+    frame.src = video.embed_url;
+    frame.loading = "lazy";
+    frame.allow = "clipboard-write; autoplay; fullscreen";
+    frame.allowFullscreen = true;
+    videoEl.appendChild(title);
+    videoEl.appendChild(frame);
+}
+
 function showResult(data) {
     questionEl.textContent = data.question || "";
     answerEl.textContent = data.answer || "";
@@ -94,6 +113,8 @@ function showResult(data) {
     if (lastRequestId) {
         feedbackEl.hidden = false;
     }
+
+    renderVideo(data.video);
 
     if (data.audio_base64) {
         try {

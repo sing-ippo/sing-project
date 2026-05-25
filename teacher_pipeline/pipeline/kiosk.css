@@ -1,26 +1,8 @@
+/* Только уникальное для киоска — база/шапка/токены в /shared/theme.css */
 body {
-    margin: 0;
-    font-family: sans-serif;
-    background: #f0f4f8;
     height: 100vh;
     display: flex;
     flex-direction: column;
-}
-
-header {
-    padding: 20px;
-    text-align: center;
-}
-
-header img {
-    height: 60px;
-}
-
-header h1 {
-    margin: 10px 0 0;
-    font-size: 24px;
-    font-weight: 600;
-    color: #1a237e;
 }
 
 main {
@@ -37,20 +19,21 @@ main {
     height: 250px;
     border-radius: 50%;
     border: none;
-    background: #2196f3;
+    background: var(--accent-grad);
     color: white;
     font-size: 32px;
+    font-family: var(--font);
     cursor: pointer;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    box-shadow: var(--shadow-lg);
 }
 
 #record-btn.recording {
-    background: #f44336;
+    background: var(--danger);
     animation: pulse 1s infinite;
 }
 
 #record-btn.loading {
-    background: #ff9800;
+    background: var(--warning);
     animation: spin 1s linear infinite;
 }
 
@@ -71,8 +54,8 @@ main {
     padding: 20px;
 }
 
-#question { color: #555; }
-#answer { color: #222; font-weight: bold; white-space: pre-line; }
+#question { color: var(--text-2); }
+#answer { color: var(--text-1); font-weight: bold; white-space: pre-line; }
 
 #feedback {
     display: flex;
@@ -82,16 +65,34 @@ main {
 
 .feedback-label {
     font-size: 22px;
-    color: #555;
+    color: var(--text-2);
 }
 
 .fb-btn {
     font-size: 22px;
     padding: 12px 28px;
     border: none;
-    border-radius: 12px;
-    background: #e3f2fd;
+    border-radius: var(--radius-sm);
+    background: var(--accent-light);
+    color: var(--accent);
     cursor: pointer;
 }
 
-.fb-btn:hover { background: #bbdefb; }
+.fb-btn:hover { filter: brightness(.97); }
+
+#video:not(:empty) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+#video .video-title { font-size: 18px; font-weight: 600; color: var(--text-2); }
+#video iframe {
+    width: 560px;
+    max-width: 90vw;
+    aspect-ratio: 16 / 9;
+    border: 0;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    background: #000;
+}

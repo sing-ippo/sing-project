@@ -1,0 +1,15 @@
+# Лёгкие зависимости — без ML. Достаточно для keyword-чата и Telegram-ботов.
+aiohttp-socks
+aiogram
+aiofile
+babel
+python-dotenv
+pytz
+fastapi
+uvicorn
+python-multipart
+httpx
+beautifulsoup4
+pymorphy3
+numpy
+langchain-text-splitters

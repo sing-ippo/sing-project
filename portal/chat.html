@@ -4,13 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Чат с ассистентом МИРЭА</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/shared/theme.css">
+    <link rel="stylesheet" href="/shared/vendor/katex/katex.min.css">
     <link rel="stylesheet" href="chat.css">
+    <script defer src="/shared/layout.js"></script>
+    <script defer src="vendor/marked.min.js"></script>
+    <script defer src="vendor/purify.min.js"></script>
+    <script defer src="/shared/vendor/katex/katex.min.js"></script>
+    <script defer src="/shared/vendor/katex/contrib/auto-render.min.js"></script>
 </head>
 <body>
-    <header>
-        <a class="back" href="/portal/">← На главную</a>
-        <h1>Чат с ассистентом</h1>
-    </header>
+    <app-header title="Чат с ассистентом" subtitle="Спросите про поступление, учёбу и жизнь в РТУ МИРЭА" badge="💬"></app-header>
 
     <main>
         <div id="messages"></div>

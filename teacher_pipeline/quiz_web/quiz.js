@@ -19,12 +19,14 @@ const inputBlock = document.getElementById("input-block");
 const quizBlock = document.getElementById("quiz-block");
 const exportFormat = document.getElementById("export-format");
 const exportBtn = document.getElementById("export-btn");
+const exportAnswers = document.getElementById("export-answers");
 const questionArea = document.getElementById("question-area");
 const resultArea = document.getElementById("result-area");
 const restartBtn = document.getElementById("restart-btn");
 
 let mode = "text"; // "text" | "document"
 let quiz = [];
+let lastMeta = {};
 let current = 0;
 let score = 0;
 
@@ -109,6 +111,7 @@ async function generate() {
             (m.connectivity ? `, связность=${conn}` : "") +
             `, время сервера=${m.elapsed_ms} мс`);
         quiz = data.quiz || [];
+        lastMeta = m;
         if (!quiz.length) throw new Error("Пустой квиз");
         startQuiz();
     } catch (err) {
@@ -272,11 +275,52 @@ function download(filename, text, mime) {
     URL.revokeObjectURL(url);
 }
 
+function quizTitle() {
+    const t = lastMeta.topic;
+    return t && t !== "—" ? "Тест: " + t : "Тест";
+}
+
+// Печатные форматы (pdf/docx) — собирает сервер; качаем blob.
+async function exportPrintable(fmt) {
+    const form = new FormData();
+    form.append("quiz", JSON.stringify(quiz));
+    form.append("format", fmt);
+    form.append("title", quizTitle());
+    form.append("with_answers", exportAnswers && exportAnswers.checked ? "true" : "false");
+    dbg(`→ POST /export | формат ${fmt} | ключ: ${exportAnswers && exportAnswers.checked}`);
+    exportBtn.disabled = true;
+    try {
+        const resp = await fetch(`${BACKEND_URL}/export`, { method: "POST", body: form });
+        if (!resp.ok) {
+            let detail = `HTTP ${resp.status}`;
+            try { detail = (await resp.json()).detail || detail; } catch (e) {}
+            throw new Error(detail);
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fmt === "pdf" ? "quiz.pdf" : "quiz.docx";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        dbg(`← файл ${a.download} скачан`, "dbg-ok");
+    } catch (err) {
+        dbg(`← ОШИБКА экспорта: ${err.message}`, "dbg-err");
+    } finally {
+        exportBtn.disabled = false;
+    }
+}
+
 exportBtn.addEventListener("click", () => {
     if (!quiz.length) return;
-    if (exportFormat.value === "gift") {
+    const fmt = exportFormat.value;
+    if (fmt === "gift") {
         download("quiz.gift.txt", toGIFT(quiz), "text/plain;charset=utf-8");
-    } else {
+    } else if (fmt === "xml") {
         download("quiz_moodle.xml", toMoodleXML(quiz), "application/xml;charset=utf-8");
+    } else {
+        exportPrintable(fmt); // pdf | docx
     }
 });

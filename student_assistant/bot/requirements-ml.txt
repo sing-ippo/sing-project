@@ -1,0 +1,6 @@
+# Тяжёлые ML-зависимости — только для полного образа (голос + семантический RAG).
+torch
+openai-whisper
+sentence-transformers
+scipy
+omegaconf
