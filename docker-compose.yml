@@ -11,7 +11,7 @@ services:
         aliases: [chat_backend]   # стабильный апстрим для nginx /api/voice
     command: uvicorn voice_server:app --host 0.0.0.0 --port 8000
     ports:
-      - "8010:8000"
+      - "127.0.0.1:8010:8000"
     environment:
       - RAG_MODE=semantic
       - ENABLE_VOICE=true
@@ -46,7 +46,7 @@ services:
         aliases: [chat_backend]   # стабильный апстрим для nginx /api/voice
     command: uvicorn voice_server:app --host 0.0.0.0 --port 8000 --workers 1
     ports:
-      - "8010:8000"
+      - "127.0.0.1:8010:8000"
     environment:
       - RAG_MODE=keyword
       - ENABLE_VOICE=false
@@ -92,7 +92,7 @@ services:
     build: ./teacher_pipeline/bot
     command: uvicorn quiz_server:app --host 0.0.0.0 --port 8000
     ports:
-      - "8020:8000"
+      - "127.0.0.1:8020:8000"
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
@@ -114,7 +114,7 @@ services:
     profiles: ["full"]
     command: uvicorn formulas_api.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     environment:
       - GOTENBERG_URL=http://gotenberg:3000
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
@@ -136,11 +136,12 @@ services:
       - AUTH_USERS=${AUTH_USERS:-admin:mirea}
       - SESSION_SECRET=${SESSION_SECRET:-change-me-please}
       - SESSION_TTL=${SESSION_TTL:-43200}
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
 
   web:
     image: nginx:alpine
     ports:
-      - "3001:80"
+      - "127.0.0.1:3001:80"
     depends_on:
       - auth
     volumes:

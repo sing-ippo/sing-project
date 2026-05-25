@@ -18,6 +18,8 @@ USERS = dict(
 SECRET = os.getenv("SESSION_SECRET", "change-me-please").encode("utf-8")
 COOKIE = "mirea_session"
 TTL = int(os.getenv("SESSION_TTL", str(60 * 60 * 12)))  # 12 часов
+# На проде (HTTPS) cookie должна быть Secure; локально по HTTP — false.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
 app = FastAPI(title="Auth")
 
@@ -58,7 +60,7 @@ async def login(username: str = Form(...), password: str = Form(...)) -> Respons
     resp = JSONResponse({"ok": True})
     resp.set_cookie(
         COOKIE, make_token(username),
-        max_age=TTL, httponly=True, samesite="lax", path="/",
+        max_age=TTL, httponly=True, samesite="lax", path="/", secure=COOKIE_SECURE,
     )
     return resp
 
