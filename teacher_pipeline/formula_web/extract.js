@@ -1,5 +1,5 @@
 // Адрес сервиса формул (formulas). Менять только здесь.
-const BACKEND_URL = "http://localhost:8001";
+const BACKEND_URL = "/api/formulas";
 
 const fileInput = document.getElementById("file-input");
 const fileName = document.getElementById("file-name");

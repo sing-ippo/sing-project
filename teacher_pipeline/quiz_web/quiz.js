@@ -1,5 +1,5 @@
 // Адрес сервера генерации квизов. Менять только здесь.
-const BACKEND_URL = "http://localhost:8020";
+const BACKEND_URL = "/api/quiz";
 
 const modeTextBtn = document.getElementById("mode-text");
 const modeDocBtn = document.getElementById("mode-doc");

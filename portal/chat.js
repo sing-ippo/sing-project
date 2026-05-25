@@ -1,5 +1,5 @@
 // Адрес голосового сервера (voice_server). Менять только здесь.
-const BACKEND_URL = "http://localhost:8010";
+const BACKEND_URL = "/api/voice";
 
 const messagesEl = document.getElementById("messages");
 const formEl = document.getElementById("chat-form");

@@ -1,5 +1,5 @@
 // Адрес голосового сервера (voice_server). Менять только здесь.
-const BACKEND_URL = "http://localhost:8010";
+const BACKEND_URL = "/api/voice";
 
 const recordBtn = document.getElementById("record-btn");
 const questionEl = document.getElementById("question");
