@@ -365,7 +365,7 @@ def extract_any(path: str, filename: str, page_range: Optional[List[int]] = None
 
     if ext in IMAGE_EXTS or ext == "pdf":
         if not is_pix2text_available():
-            raise FormulaExtractionError(
+            raise Pix2TextNotInstalledError(
                 "OCR-распознавание (PDF/изображения) недоступно в лёгкой версии. "
                 "Загрузите структурированный документ: .docx, .tex, .md или .html."
             )
