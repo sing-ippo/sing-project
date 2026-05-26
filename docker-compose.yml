@@ -41,6 +41,7 @@ services:
       args:
         VARIANT: light
     profiles: ["light"]
+    mem_limit: 320m          # защита боевого соседа: при перегрузе OOM убьёт наш контейнер, не его
     networks:
       default:
         aliases: [chat_backend]   # стабильный апстрим для nginx /api/voice
@@ -132,6 +133,7 @@ services:
   # Авторизация: подписанный cookie + проверка для nginx auth_request. Без БД.
   auth:
     build: ./auth
+    mem_limit: 96m
     environment:
       - AUTH_USERS=${AUTH_USERS:-admin:mirea}
       - SESSION_SECRET=${SESSION_SECRET:-change-me-please}
