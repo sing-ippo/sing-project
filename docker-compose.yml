@@ -41,7 +41,8 @@ services:
       args:
         VARIANT: light
     profiles: ["light"]
-    mem_limit: 320m          # защита боевого соседа: при перегрузе OOM убьёт наш контейнер, не его
+    restart: unless-stopped
+    mem_limit: 384m          # защита боевого соседа: при перегрузе OOM убьёт наш контейнер, не его
     networks:
       default:
         aliases: [chat_backend]   # стабильный апстрим для nginx /api/voice
@@ -91,6 +92,8 @@ services:
   # Веб-генератор квизов для преподов (без Telegram): текст/файл → квиз в браузере
   quiz_server:
     build: ./teacher_pipeline/bot
+    restart: unless-stopped
+    mem_limit: 256m
     command: uvicorn quiz_server:app --host 0.0.0.0 --port 8000
     ports:
       - "127.0.0.1:8020:8000"
@@ -133,6 +136,7 @@ services:
   # Авторизация: подписанный cookie + проверка для nginx auth_request. Без БД.
   auth:
     build: ./auth
+    restart: unless-stopped
     mem_limit: 96m
     environment:
       - AUTH_USERS=${AUTH_USERS:-admin:mirea}
@@ -142,6 +146,7 @@ services:
 
   web:
     image: nginx:alpine
+    restart: unless-stopped
     ports:
       - "127.0.0.1:3001:80"
     depends_on:
