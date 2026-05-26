@@ -211,11 +211,14 @@ formEl.addEventListener("submit", async (e) => {
 
     const status = createStatusBubble();
 
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 90000);
     try {
         const resp = await fetch(`${BACKEND_URL}/ask_text`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ question, history: history.slice(-6) }),
+            signal: ctrl.signal,
         });
         if (!resp.ok) throw new Error(`Сервер вернул ${resp.status}`);
         const data = await resp.json();
@@ -232,9 +235,13 @@ formEl.addEventListener("submit", async (e) => {
         history.push({ role: "user", content: question }, { role: "assistant", content: answer });
     } catch (err) {
         status.stop();
-        addMessage("Сервис временно недоступен. Попробуйте ещё раз.", "bot");
+        const msg = err.name === "AbortError"
+            ? "Ответ занял слишком долго. Попробуйте ещё раз."
+            : "Сервис временно недоступен. Попробуйте ещё раз.";
+        addMessage(msg, "bot");
         console.error(err);
     } finally {
+        clearTimeout(timer);
         inputEl.disabled = false;
         sendBtn.disabled = false;
         inputEl.focus();
