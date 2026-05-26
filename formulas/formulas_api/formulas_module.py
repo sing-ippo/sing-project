@@ -363,9 +363,14 @@ def extract_any(path: str, filename: str, page_range: Optional[List[int]] = None
     name = (filename or path).lower()
     ext = name.rsplit(".", 1)[-1] if "." in name else ""
 
-    if ext in IMAGE_EXTS:
-        return extract_image(path)
-    if ext == "pdf":
+    if ext in IMAGE_EXTS or ext == "pdf":
+        if not is_pix2text_available():
+            raise FormulaExtractionError(
+                "OCR-распознавание (PDF/изображения) недоступно в лёгкой версии. "
+                "Загрузите структурированный документ: .docx, .tex, .md или .html."
+            )
+        if ext in IMAGE_EXTS:
+            return extract_image(path)
         return extract_formulas(path, pages=page_range)
 
     results: List[Dict[str, Any]] = []
@@ -381,8 +386,9 @@ def extract_any(path: str, filename: str, page_range: Optional[List[int]] = None
             results += extract_text_file(path)
         except Exception as exc:
             errors.append(f"text: {exc}")
-    if ext in OFFICE_OCR_EXTS or not results:
-        # Визуальный проход через Gotenberg→pix2text (ловит формулы-картинки и бинарные форматы)
+    if (ext in OFFICE_OCR_EXTS or not results) and is_pix2text_available():
+        # Визуальный проход через Gotenberg→pix2text (ловит формулы-картинки и бинарные форматы).
+        # В лёгком образе pix2text не установлен → проход пропускается (нет смысла звать Gotenberg).
         pdf_path = None
         try:
             pdf_path = office_to_pdf(path, filename or "document")

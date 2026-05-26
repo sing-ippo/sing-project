@@ -114,8 +114,14 @@ services:
 
   # Сервис извлечения/рендера формул (pix2text + pandoc). Тяжёлый (~2GB моделей). Только full.
   formulas:
-    build: ./formulas
+    build:
+      context: ./formulas
+      args:
+        VARIANT: full
     profiles: ["full"]
+    networks:
+      default:
+        aliases: [formulas_backend]   # стабильный апстрим для nginx /api/formulas
     command: uvicorn formulas_api.main:app --host 0.0.0.0 --port 8000
     ports:
       - "127.0.0.1:8001:8000"
@@ -132,6 +138,26 @@ services:
       - gotenberg
     volumes:
       - model-cache:/root/.cache
+
+  # Лёгкое извлечение формул: pandoc+regex (docx/tex/md/html), без torch/pix2text/Gotenberg.
+  # Профиль light, влезает на 1 ГБ. OCR PDF/изображений недоступно (нужен full).
+  formulas_light:
+    build:
+      context: ./formulas
+      args:
+        VARIANT: light
+    profiles: ["light"]
+    restart: unless-stopped
+    mem_limit: 320m
+    networks:
+      default:
+        aliases: [formulas_backend]   # тот же апстрим, что и full formulas
+    command: uvicorn formulas_api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
 
   # Авторизация: подписанный cookie + проверка для nginx auth_request. Без БД.
   auth:
