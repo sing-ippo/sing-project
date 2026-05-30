@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Граф знаний FAQ — РТУ МИРЭА</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <style>
+        :root {
+            --bg: #f0f4ff;
+            --surface: #ffffff;
+            --surface-2: #f8faff;
+            --border: #e4e9f5;
+            --accent: #6366f1;
+            --accent-2: #8b5cf6;
+            --accent-light: #ede9fe;
+            --accent-grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --success: #10b981;
+            --success-light: #d1fae5;
+            --warning: #f59e0b;
+            --warning-light: #fef3c7;
+            --danger: #ef4444;
+            --danger-light: #fee2e2;
+            --info: #3b82f6;
+            --info-light: #dbeafe;
+            --text-1: #1e1b4b;
+            --text-2: #4b5563;
+            --text-3: #9ca3af;
+            --shadow-sm: 0 1px 3px rgba(99,102,241,0.08), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 16px rgba(99,102,241,0.10), 0 2px 6px rgba(0,0,0,0.06);
+            --shadow-lg: 0 8px 32px rgba(99,102,241,0.14), 0 4px 12px rgba(0,0,0,0.07);
+            --shadow-xl: 0 20px 60px rgba(99,102,241,0.16), 0 8px 20px rgba(0,0,0,0.08);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text-1);
+            min-height: 100vh;
+            padding: 28px 20px 60px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container { max-width: 1440px; margin: 0 auto; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(18px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.96); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+
+        /* ── HEADER ── */
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: fadeUp 0.5s ease both;
+        }
+
+        .header-inner {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--accent-light);
+            color: var(--accent);
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: 50px;
+        }
+
+        header h1 {
+            font-size: clamp(1.9rem, 4vw, 2.8rem);
+            font-weight: 800;
+            color: var(--text-1);
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+        }
+
+        header h1 span {
+            background: var(--accent-grad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        header p {
+            color: var(--text-2);
+            font-size: 1rem;
+            font-weight: 400;
+        }
+
+        /* ── CARDS ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .section-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.4px;
+            color: var(--text-3);
+            margin-bottom: 16px;
+        }
+
+        /* ── UPLOAD ── */
+        .upload-section {
+            margin-bottom: 20px;
+            animation: fadeUp 0.5s 0.05s ease both;
+        }
+
+        .upload-card {
+            border: 1.5px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 28px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: var(--surface-2);
+            transition: all var(--transition);
+            position: relative;
+            overflow: hidden;
+            max-width: 360px;
+            margin: 0 auto;
+        }
+
+        .upload-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--accent-grad);
+            opacity: 0;
+            transition: opacity var(--transition);
+        }
+
+        .upload-card:hover {
+            border-color: var(--accent);
+            border-style: solid;
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .upload-card:hover::before { opacity: 0.04; }
+
+        .upload-card .upload-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .upload-card .upload-title {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 4px;
+        }
+
+        .upload-card .upload-hint {
+            font-size: 0.78rem;
+            color: var(--text-3);
+            margin-bottom: 16px;
+        }
+
+        .upload-card input[type="file"] { display: none; }
+
+        .upload-card .file-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--accent-grad);
+            color: white;
+            padding: 10px 22px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: transform var(--transition), box-shadow var(--transition);
+            position: relative;
+        }
+
+        .upload-card .file-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99,102,241,0.35);
+        }
+
+        .upload-card .file-name {
+            margin-top: 12px;
+            color: var(--text-3);
+            font-size: 0.78rem;
+        }
+
+        .upload-card.loaded {
+            border-style: solid;
+            border-color: var(--success);
+            background: var(--success-light);
+        }
+
+        .upload-card.loaded .upload-title { color: var(--success); }
+        .upload-card.loaded .file-name { color: #065f46; }
+
+        /* ── KPI ── */
+        .kpi-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 18px;
+            margin-bottom: 20px;
+            animation: fadeUp 0.5s 0.1s ease both;
+        }
+
+        .kpi-card {
+            position: relative;
+            overflow: hidden;
+            transition: transform var(--transition), box-shadow var(--transition);
+        }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            top: 0; right: 0;
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: var(--accent-grad);
+            opacity: 0.06;
+            transform: translate(20px, -20px);
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-xl);
+        }
+
+        .kpi-icon { font-size: 1.4rem; margin-bottom: 12px; display: block; }
+
+        .kpi-card h3 {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-3);
+            margin-bottom: 8px;
+        }
+
+        .kpi-card .value {
+            font-size: 2.6rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1;
+            color: var(--text-1);
+            margin-bottom: 6px;
+        }
+
+        .kpi-card.positive .value { color: var(--success); }
+        .kpi-card.quality  .value { color: var(--accent); }
+
+        .kpi-card .subtext { color: var(--text-3); font-size: 0.78rem; }
+
+        .kpi-bar {
+            height: 3px;
+            border-radius: 2px;
+            background: var(--border);
+            margin-top: 14px;
+            overflow: hidden;
+        }
+
+        .kpi-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: var(--accent-grad);
+            transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        .kpi-card.positive .kpi-bar-fill { background: linear-gradient(90deg, #10b981, #34d399); }
+        .kpi-card.quality  .kpi-bar-fill { background: var(--accent-grad); }
+
+        /* ── CONTROLS ── */
+        .controls-section {
+            margin-bottom: 20px;
+            animation: scaleIn 0.3s ease both;
+        }
+
+        .controls-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            margin-top: 16px;
+        }
+
+        .search-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .search-wrap label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        #search-input {
+            padding: 10px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.9rem;
+            color: var(--text-1);
+            background: var(--surface-2);
+            transition: border-color var(--transition), box-shadow var(--transition);
+            min-width: 220px;
+        }
+
+        #search-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+
+        #search-input::placeholder { color: var(--text-3); }
+
+        .filter-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .filter-btn {
+            padding: 6px 14px;
+            border-radius: 50px;
+            border: 2px solid transparent;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: opacity var(--transition), transform var(--transition), box-shadow var(--transition);
+            color: #fff;
+        }
+
+        .filter-btn.active { opacity: 1; }
+        .filter-btn.inactive { opacity: 0.3; }
+
+        .filter-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* ── GRAPH SECTION ── */
+        .graph-section {
+            margin-bottom: 20px;
+            animation: fadeUp 0.5s 0.15s ease both;
+        }
+
+        .graph-section h2 {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-1);
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .graph-wrapper {
+            position: relative;
+            height: 600px;
+            background: var(--surface-2);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        #graph-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* ── D3 ELEMENTS ── */
+        .link {
+            stroke: var(--border);
+            stroke-width: 1.5;
+            fill: none;
+            transition: opacity 0.4s ease 0.35s;
+        }
+
+        .node circle {
+            cursor: pointer;
+            stroke-width: 2;
+            transition: opacity 0.4s ease 0.35s;
+        }
+
+        .node.category circle { stroke: rgba(255,255,255,0.5); }
+        .node.question circle { stroke: transparent; }
+
+        .node text {
+            pointer-events: none;
+            fill: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            text-anchor: middle;
+            dominant-baseline: central;
+            font-family: 'Inter', sans-serif;
+            transition: opacity 0.4s ease 0.35s;
+        }
+
+        .node.question text {
+            fill: var(--text-2);
+            font-weight: 500;
+            font-size: 9px;
+        }
+
+        .node.dim circle { opacity: 0.12; transition: opacity 0.4s ease 0.35s; }
+        .node.dim text   { opacity: 0.12; transition: opacity 0.4s ease 0.35s; }
+        .link.dim        { opacity: 0.05; transition: opacity 0.4s ease 0.35s; }
+
+        .node.highlighted circle {
+            stroke: var(--warning) !important;
+            stroke-width: 3 !important;
+        }
+
+        /* ── INFO CARD ── */
+        #info-card {
+            display: none;
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 300px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: var(--shadow-xl);
+            z-index: 20;
+            max-height: calc(100% - 28px);
+            overflow-y: auto;
+        }
+
+        #info-card .section-label { margin-bottom: 6px; }
+
+        #info-card h3 {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-1);
+            line-height: 1.4;
+            margin-bottom: 14px;
+        }
+
+        #info-card p {
+            font-size: 0.85rem;
+            color: var(--text-2);
+            line-height: 1.6;
+            margin-bottom: 14px;
+        }
+
+        #close-card {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            background: none;
+            border: none;
+            color: var(--text-3);
+            font-size: 1.2rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 2px 4px;
+            border-radius: var(--radius-xs);
+            transition: color var(--transition), background var(--transition);
+        }
+
+        #close-card:hover { color: var(--text-1); background: var(--border); }
+
+        .kw-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 6px;
+        }
+
+        .kw-tag {
+            padding: 3px 10px;
+            border-radius: 50px;
+            background: var(--accent-light);
+            color: var(--accent);
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        /* ── LEGEND ── */
+        .legend-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 24px;
+            margin-top: 20px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.82rem;
+            color: var(--text-2);
+            font-weight: 500;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .legend-q-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #9ca3af;
+            flex-shrink: 0;
+        }
+
+        /* ── EMPTY STATE ── */
+        #empty-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            color: var(--text-3);
+            font-size: 0.95rem;
+            pointer-events: none;
+        }
+
+        #empty-state .empty-icon { font-size: 3rem; display: block; }
+
+        /* ── HIDDEN ── */
+        .hidden { display: none !important; }
+
+        @media (max-width: 600px) {
+            body { padding: 16px 12px 40px; }
+            .card { padding: 18px; }
+            .graph-wrapper { height: 420px; }
+            #info-card { width: calc(100% - 28px); }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <header>
+        <div class="header-inner">
+            <div class="header-badge">🔗 Граф знаний</div>
+            <h1>Граф <span>знаний</span> FAQ</h1>
+            <p>РТУ МИРЭА — Исследуй базу знаний студенческого ассистента</p>
+        </div>
+    </header>
+
+    <!-- Загрузка -->
+    <section class="upload-section">
+        <div class="card">
+            <div class="section-label">📁 Загрузка данных</div>
+            <div class="upload-card" id="faq-upload">
+                <span class="upload-icon">🗂</span>
+                <span class="upload-title">База знаний FAQ</span>
+                <span class="upload-hint">Файл faq.json</span>
+                <input type="file" id="faq-file" accept=".json">
+                <label for="faq-file" class="file-btn">⬆ Выбрать файл</label>
+                <div class="file-name" id="faq-filename">Файл не выбран</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- KPI -->
+    <section class="kpi-section hidden" id="kpi-section">
+        <div class="kpi-card card">
+            <span class="kpi-icon">❓</span>
+            <h3>Вопросов</h3>
+            <div class="value" id="kpi-questions">0</div>
+            <div class="subtext">В базе знаний</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:100%"></div></div>
+        </div>
+        <div class="kpi-card card positive">
+            <span class="kpi-icon">🏷</span>
+            <h3>Категорий</h3>
+            <div class="value" id="kpi-categories">0</div>
+            <div class="subtext">Тематических разделов</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:100%"></div></div>
+        </div>
+        <div class="kpi-card card quality">
+            <span class="kpi-icon">🔗</span>
+            <h3>Связей</h3>
+            <div class="value" id="kpi-links">0</div>
+            <div class="subtext">Рёбер в графе</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:100%"></div></div>
+        </div>
+        <div class="kpi-card card">
+            <span class="kpi-icon">📊</span>
+            <h3>Среднее</h3>
+            <div class="value" id="kpi-avg">0</div>
+            <div class="subtext">Вопросов на категорию</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-avg-bar" style="width:60%"></div></div>
+        </div>
+    </section>
+
+    <!-- Управление -->
+    <section class="controls-section card hidden" id="controls-section">
+        <div class="section-label">🔍 Фильтр и поиск</div>
+        <div class="controls-row">
+            <div class="search-wrap">
+                <label for="search-input">Поиск по вопросу</label>
+                <input type="text" id="search-input" placeholder="Введите запрос…">
+            </div>
+            <div class="filter-chips" id="category-filters"></div>
+        </div>
+    </section>
+
+    <!-- Граф -->
+    <section class="graph-section card hidden" id="graph-section">
+        <h2>🔗 Граф знаний</h2>
+        <div class="graph-wrapper" id="graph-wrapper">
+            <div id="empty-state">
+                <span class="empty-icon">🔗</span>
+                <span>Загрузите faq.json для визуализации</span>
+            </div>
+            <svg id="graph-svg"></svg>
+
+            <!-- Info card -->
+            <div id="info-card">
+                <button id="close-card" onclick="closeCard()">×</button>
+                <div id="card-content"></div>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend-grid" id="legend-grid"></div>
+    </section>
+
+</div>
+
+<script>
+    const CATEGORY_COLORS = {
+        'экзамены':        '#e63946',
+        'преподаватели':   '#457b9d',
+        'навигация':       '#2a9d8f',
+        'учебный_процесс': '#e9c46a',
+        'ит_системы':      '#6a4c93',
+        'бюрократия':      '#f4a261',
+        'общежитие':       '#264653',
+        'лекции':          '#a8dadc',
+    };
+
+    const DEFAULT_COLOR = '#9ca3af';
+
+    function categoryColor(cat) {
+        return CATEGORY_COLORS[cat] || DEFAULT_COLOR;
+    }
+
+    let simulation = null;
+    let allNodes = [];
+    let allLinks = [];
+    let activeCategories = new Set();
+    let svgRoot = null;
+
+    // ── File loading ──────────────────────────────────────────────────────────
+    document.getElementById('faq-file').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        document.getElementById('faq-filename').textContent = file.name;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = JSON.parse(ev.target.result);
+                buildGraph(data);
+            } catch (err) {
+                alert('Ошибка парсинга JSON: ' + err.message);
+            }
+        };
+        reader.readAsText(file, 'utf-8');
+        e.target.value = '';
+    });
+
+    // ── Build graph data ──────────────────────────────────────────────────────
+    function buildGraph(faqData) {
+        if (!Array.isArray(faqData) || faqData.length === 0) {
+            alert('Некорректный формат: ожидается массив FAQ-записей');
+            return;
+        }
+
+        document.getElementById('faq-upload').classList.add('loaded');
+        document.getElementById('empty-state').style.display = 'none';
+
+        const nodes = [];
+        const links = [];
+        const categorySet = new Map();
+
+        faqData.forEach((entry) => {
+            const cat = entry.category || 'другое';
+            if (!categorySet.has(cat)) {
+                categorySet.set(cat, nodes.length);
+                nodes.push({
+                    id: `cat_${cat}`,
+                    type: 'category',
+                    label: cat,
+                    color: categoryColor(cat),
+                    category: cat,
+                });
+            }
+            const qId = `q_${entry.id}`;
+            nodes.push({
+                id: qId,
+                type: 'question',
+                label: entry.question,
+                color: DEFAULT_COLOR,
+                category: cat,
+                data: entry,
+            });
+            links.push({ source: `cat_${cat}`, target: qId });
+        });
+
+        allNodes = nodes;
+        allLinks = links;
+
+        const categories = [...categorySet.keys()];
+        activeCategories = new Set(categories);
+
+        showDashboard();
+        updateKPI(faqData.length, categories.length, links.length);
+        renderFilters(categories);
+        renderLegend(categories);
+        drawGraph();
+    }
+
+    // ── Show sections ─────────────────────────────────────────────────────────
+    function showDashboard() {
+        document.getElementById('kpi-section').classList.remove('hidden');
+        document.getElementById('controls-section').classList.remove('hidden');
+        document.getElementById('graph-section').classList.remove('hidden');
+    }
+
+    // ── KPI ───────────────────────────────────────────────────────────────────
+    function animateCounter(id, target) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const duration = 800;
+        const start = performance.now();
+        const from = parseInt(el.dataset.prev || '0', 10);
+        el.dataset.prev = target;
+        function tick(now) {
+            const t = Math.min((now - start) / duration, 1);
+            const eased = 1 - Math.pow(1 - t, 3);
+            el.textContent = Math.round(from + (target - from) * eased);
+            if (t < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+    }
+
+    function updateKPI(qCount, catCount, linkCount) {
+        animateCounter('kpi-questions', qCount);
+        animateCounter('kpi-categories', catCount);
+        animateCounter('kpi-links', linkCount);
+        animateCounter('kpi-avg', catCount > 0 ? Math.round(qCount / catCount) : 0);
+    }
+
+    // ── Draw D3 graph ─────────────────────────────────────────────────────────
+    function drawGraph() {
+        const wrapper = document.getElementById('graph-wrapper');
+        const width  = wrapper.clientWidth;
+        const height = wrapper.clientHeight;
+
+        const svg = d3.select('#graph-svg');
+        svg.selectAll('*').remove();
+
+        const g = svg.append('g');
+
+        svg.call(
+            d3.zoom()
+                .scaleExtent([0.2, 5])
+                .on('zoom', (event) => g.attr('transform', event.transform))
+        );
+
+        const visibleNodes = allNodes.filter(n => activeCategories.has(n.category));
+        const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+        const visibleLinks = allLinks.filter(l => {
+            const s = typeof l.source === 'object' ? l.source.id : l.source;
+            const t = typeof l.target === 'object' ? l.target.id : l.target;
+            return visibleNodeIds.has(s) && visibleNodeIds.has(t);
+        });
+
+        if (simulation) simulation.stop();
+
+        simulation = d3.forceSimulation(visibleNodes)
+            .force('link', d3.forceLink(visibleLinks).id(d => d.id).distance(50).strength(0.8))
+            .force('charge', d3.forceManyBody().strength(-80))
+            .force('center', d3.forceCenter(width / 2, height / 2).strength(0.15))
+            .force('x', d3.forceX(width / 2).strength(0.07))
+            .force('y', d3.forceY(height / 2).strength(0.07))
+            .force('collide', d3.forceCollide(d => d.type === 'category' ? 28 : 10))
+            .velocityDecay(0.55)
+            .alphaDecay(0.025);
+
+        const link = g.append('g')
+            .selectAll('line')
+            .data(visibleLinks)
+            .join('line')
+            .attr('class', 'link');
+
+        const node = g.append('g')
+            .selectAll('g')
+            .data(visibleNodes)
+            .join('g')
+            .attr('class', d => `node ${d.type}`)
+            .call(
+                d3.drag()
+                    .on('start', (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x; d.fy = d.y;
+                    })
+                    .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+                    .on('end', (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0);
+                        d.fx = null; d.fy = null;
+                    })
+            );
+
+        node.append('circle')
+            .attr('r', d => d.type === 'category' ? 26 : 11)
+            .attr('fill', d => d.color);
+
+        node.filter(d => d.type === 'category')
+            .append('text')
+            .each(function(d) {
+                const words = d.label.replace(/_/g, ' ').split(' ');
+                const lineHeight = 11;
+                const el = d3.select(this);
+                words.forEach((word, i) => {
+                    el.append('tspan')
+                        .attr('x', 0)
+                        .attr('dy', i === 0 ? -(words.length - 1) * lineHeight / 2 : lineHeight)
+                        .text(word);
+                });
+            });
+
+        // Hover
+        node
+            .on('mouseover', (event, d) => {
+                const related = new Set([d.id]);
+                if (d.type === 'category') {
+                    visibleLinks.forEach(l => {
+                        const s = typeof l.source === 'object' ? l.source.id : l.source;
+                        const t = typeof l.target === 'object' ? l.target.id : l.target;
+                        if (s === d.id) related.add(t);
+                    });
+                } else {
+                    visibleLinks.forEach(l => {
+                        const s = typeof l.source === 'object' ? l.source.id : l.source;
+                        const t = typeof l.target === 'object' ? l.target.id : l.target;
+                        if (t === d.id) {
+                            related.add(s);
+                            visibleLinks.forEach(l2 => {
+                                const s2 = typeof l2.source === 'object' ? l2.source.id : l2.source;
+                                const t2 = typeof l2.target === 'object' ? l2.target.id : l2.target;
+                                if (s2 === s) related.add(t2);
+                            });
+                        }
+                    });
+                }
+                node.classed('dim', n => !related.has(n.id));
+                link.classed('dim', l => {
+                    const s = typeof l.source === 'object' ? l.source.id : l.source;
+                    const t = typeof l.target === 'object' ? l.target.id : l.target;
+                    return !related.has(s) || !related.has(t);
+                });
+            })
+            .on('mouseout', () => {
+                node.classed('dim', false);
+                link.classed('dim', false);
+            });
+
+        // Click → info card
+        node.filter(d => d.type === 'question')
+            .on('click', (event, d) => {
+                event.stopPropagation();
+                showCard(d.data);
+            });
+
+        svg.on('click', closeCard);
+
+        simulation.on('tick', () => {
+            link
+                .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+            node.attr('transform', d => `translate(${d.x},${d.y})`);
+        });
+
+        svgRoot = { node, link };
+    }
+
+    // ── Info card ─────────────────────────────────────────────────────────────
+    function showCard(entry) {
+        const kws = Array.isArray(entry.keywords) && entry.keywords.length
+            ? `<div class="section-label" style="margin-top:12px">Ключевые слова</div>
+               <div class="kw-list">${entry.keywords.map(k => `<span class="kw-tag">${escapeHtml(k)}</span>`).join('')}</div>`
+            : '';
+
+        const catColor = categoryColor(entry.category);
+
+        document.getElementById('card-content').innerHTML = `
+            <div style="margin-bottom:14px">
+                <div class="section-label">Вопрос</div>
+                <h3 style="font-size:0.9rem;font-weight:700;color:var(--text-1);line-height:1.4">${escapeHtml(entry.question)}</h3>
+            </div>
+            <div style="margin-bottom:14px">
+                <div class="section-label">Ответ</div>
+                <p style="font-size:0.85rem;color:var(--text-2);line-height:1.6;margin:0">${escapeHtml(entry.answer)}</p>
+            </div>
+            ${kws}
+            <div style="margin-top:12px">
+                <div class="section-label">Категория</div>
+                <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:50px;background:${catColor};color:#fff;font-size:0.75rem;font-weight:700">${escapeHtml(entry.category || '—')}</span>
+            </div>
+        `;
+        document.getElementById('info-card').style.display = 'block';
+    }
+
+    function closeCard() {
+        document.getElementById('info-card').style.display = 'none';
+    }
+
+    // ── Search ────────────────────────────────────────────────────────────────
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        const query = e.target.value.trim().toLowerCase();
+        if (!svgRoot) return;
+        svgRoot.node.classed('highlighted', d => {
+            if (d.type !== 'question' || !query) return false;
+            return d.label.toLowerCase().includes(query)
+                || (d.data.keywords || []).some(k => k.toLowerCase().includes(query));
+        });
+    });
+
+    // ── Category filter ───────────────────────────────────────────────────────
+    function renderFilters(categories) {
+        const container = document.getElementById('category-filters');
+        container.innerHTML = '';
+        categories.forEach(cat => {
+            const btn = document.createElement('button');
+            btn.className = 'filter-btn active';
+            btn.textContent = cat;
+            btn.style.background = categoryColor(cat);
+            btn.dataset.category = cat;
+            btn.addEventListener('click', () => toggleCategory(cat));
+            container.appendChild(btn);
+        });
+    }
+
+    function toggleCategory(cat) {
+        if (activeCategories.has(cat)) {
+            if (activeCategories.size === 1) return;
+            activeCategories.delete(cat);
+        } else {
+            activeCategories.add(cat);
+        }
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            const active = activeCategories.has(btn.dataset.category);
+            btn.classList.toggle('active', active);
+            btn.classList.toggle('inactive', !active);
+        });
+        closeCard();
+        drawGraph();
+    }
+
+    // ── Legend ────────────────────────────────────────────────────────────────
+    function renderLegend(categories) {
+        const grid = document.getElementById('legend-grid');
+        grid.innerHTML =
+            categories.map(cat => `
+                <div class="legend-item">
+                    <span class="legend-dot" style="background:${categoryColor(cat)}"></span>
+                    <span>${escapeHtml(cat)}</span>
+                </div>
+            `).join('') +
+            `<div class="legend-item">
+                <span class="legend-q-dot"></span>
+                <span>Вопрос</span>
+            </div>`;
+    }
+
+    // ── Utility ───────────────────────────────────────────────────────────────
+    function escapeHtml(str) {
+        if (!str) return '';
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+
+    window.addEventListener('resize', () => { if (allNodes.length) drawGraph(); });
+</script>
+</body>
+</html>
